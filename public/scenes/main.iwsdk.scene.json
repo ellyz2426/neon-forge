@@ -31,7 +31,7 @@
       "transform": { "position": [0, 2.6, -2], "scale": 0.35 },
       "components": {
         "RayInteractable": {},
-        "ScreenSpace": { "top": "10px", "left": "25%", "width": "50vw", "height": "8%" }
+        "ScreenSpace": { "top": "10px", "left": "20%", "width": "60vw", "height": "8%" }
       }
     },
     {
@@ -56,6 +56,20 @@
       "name": "Settings Panel",
       "content": { "type": "asset", "asset": "settings-panel" },
       "transform": { "position": [0, 1.6, -2.5], "scale": 0.4 },
+      "components": { "RayInteractable": {} }
+    },
+    {
+      "id": "pause-panel",
+      "name": "Pause Panel",
+      "content": { "type": "asset", "asset": "pause-panel" },
+      "transform": { "position": [0, 1.6, -2.5], "scale": 0.4 },
+      "components": { "RayInteractable": {} }
+    },
+    {
+      "id": "wave-panel",
+      "name": "Wave Panel",
+      "content": { "type": "asset", "asset": "wave-panel" },
+      "transform": { "position": [0, 1.5, -2.0], "scale": 0.5 },
       "components": { "RayInteractable": {} }
     }
   ]

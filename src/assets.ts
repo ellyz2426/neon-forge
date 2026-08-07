@@ -29,4 +29,14 @@ export default defineAssets({
 		type: AssetType.UIKitML,
 		name: 'Settings Panel',
 	},
+	'pause-panel': {
+		url: publicAssetUrl('ui/pause.uikitml'),
+		type: AssetType.UIKitML,
+		name: 'Pause Panel',
+	},
+	'wave-panel': {
+		url: publicAssetUrl('ui/wave.uikitml'),
+		type: AssetType.UIKitML,
+		name: 'Wave Panel',
+	},
 });

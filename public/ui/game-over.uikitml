@@ -10,7 +10,7 @@
     border-color: #ff4444;
     border-width: 2;
     width: 380;
-    height: 400;
+    height: 440;
   }
   .title {
     font-size: 30;
@@ -31,6 +31,14 @@
     font-size: 20;
     color: #ffffff;
   }
+  .hi-label {
+    font-size: 16;
+    color: #ffdd44;
+  }
+  .hi-value {
+    font-size: 20;
+    color: #ffdd44;
+  }
   .divider {
     width: 240;
     height: 1;
@@ -48,7 +56,7 @@
     width: 260;
     align-items: center;
     cursor: pointer;
-    margin-top: 8;
+    margin-top: 4;
   }
   .btn-text {
     font-size: 18;
@@ -74,11 +82,15 @@
     <div class="stat-label">BEST COMBO</div>
     <div class="stat-value" id="go-combo">x1</div>
   </div>
+  <div class="stat-row">
+    <div class="hi-label">HIGH SCORE</div>
+    <div class="hi-value" id="go-highscore">0</div>
+  </div>
   <div class="divider"></div>
   <div class="btn" id="btn-restart">
-    <div class="btn-text">⚔ FORGE AGAIN</div>
+    <div class="btn-text">FORGE AGAIN</div>
   </div>
   <div class="btn" id="btn-menu">
-    <div class="btn-text">🏠 MAIN MENU</div>
+    <div class="btn-text">MAIN MENU</div>
   </div>
 </Panel>

@@ -4,12 +4,12 @@
     align-items: center;
     justify-content: space-between;
     padding: 10;
-    gap: 16;
+    gap: 12;
     background-color: rgba(20, 8, 0, 0.88);
     border-radius: 10;
     border-color: #ff8800;
     border-width: 1;
-    width: 600;
+    width: 700;
     height: 70;
   }
   .stat-group {
@@ -37,16 +37,38 @@
     font-size: 20;
     color: #44ff88;
   }
+  .hi-value {
+    font-size: 14;
+    color: #ffdd44;
+  }
   .divider {
     width: 1;
     height: 40;
     background-color: rgba(255, 136, 0, 0.3);
+  }
+  .pause-btn {
+    padding-top: 6;
+    padding-bottom: 6;
+    padding-left: 10;
+    padding-right: 10;
+    background-color: rgba(255, 136, 0, 0.2);
+    border-radius: 6;
+    border-color: #ff8800;
+    border-width: 1;
+    cursor: pointer;
+    align-items: center;
+  }
+  .pause-text {
+    font-size: 14;
+    color: #ffaa33;
   }
 </style>
 <Panel class="root">
   <div class="stat-group">
     <div class="stat-label">SCORE</div>
     <div class="stat-value" id="score">0</div>
+    <div class="stat-label">HI</div>
+    <div class="hi-value" id="highscore">0</div>
   </div>
   <div class="divider"></div>
   <div class="stat-group">
@@ -61,6 +83,10 @@
   <div class="divider"></div>
   <div class="stat-group">
     <div class="stat-label">LIVES</div>
-    <div class="lives-value" id="lives">♥♥♥</div>
+    <div class="lives-value" id="lives">---</div>
+  </div>
+  <div class="divider"></div>
+  <div class="pause-btn" id="btn-pause">
+    <div class="pause-text">II</div>
   </div>
 </Panel>

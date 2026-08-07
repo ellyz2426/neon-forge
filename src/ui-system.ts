@@ -14,6 +14,8 @@ export class UISystem extends createSystem({}) {
 	private orderPanel: UIKitMLAsset | undefined;
 	private gameOverPanel: UIKitMLAsset | undefined;
 	private settingsPanel: UIKitMLAsset | undefined;
+	private pausePanel: UIKitMLAsset | undefined;
+	private wavePanel: UIKitMLAsset | undefined;
 	private lastPhase: GamePhase = 'menu';
 	private wired = false;
 	private wireAttempts = 0;
@@ -22,7 +24,7 @@ export class UISystem extends createSystem({}) {
 	private audioSys: AudioSystem | null = null;
 
 	init() {
-		this.wireDelay = 0.5; // wait for panels to load
+		this.wireDelay = 0.5;
 	}
 
 	private wirePanels() {
@@ -32,16 +34,16 @@ export class UISystem extends createSystem({}) {
 			this.orderPanel = this.world.getSceneObject<UIKitMLAsset>('order-panel');
 			this.gameOverPanel = this.world.getSceneObject<UIKitMLAsset>('game-over-panel');
 			this.settingsPanel = this.world.getSceneObject<UIKitMLAsset>('settings-panel');
+			this.pausePanel = this.world.getSceneObject<UIKitMLAsset>('pause-panel');
+			this.wavePanel = this.world.getSceneObject<UIKitMLAsset>('wave-panel');
 		} catch {
 			return;
 		}
 
-		// Find sibling systems via world
+		// Find sibling systems
 		for (const sys of (this.world as any)._systems || []) {
 			if (sys instanceof GameSystem) this.gameSys = sys;
-			if (sys instanceof AudioSystem) {
-				this.audioSys = sys;
-			}
+			if (sys instanceof AudioSystem) this.audioSys = sys;
 		}
 
 		// Menu buttons
@@ -51,7 +53,6 @@ export class UISystem extends createSystem({}) {
 		});
 		this.menuPanel?.getElementById('btn-settings')?.addEventListener('click', () => {
 			this.audioSys?.playSelect();
-			gs.phase = 'menu'; // keep menu state, show settings
 			this.showSettings();
 		});
 
@@ -87,6 +88,23 @@ export class UISystem extends createSystem({}) {
 			this.hideSettings();
 		});
 
+		// Pause panel buttons
+		this.pausePanel?.getElementById('btn-resume')?.addEventListener('click', () => {
+			this.audioSys?.playSelect();
+			this.gameSys?.resumeGame();
+		});
+		this.pausePanel?.getElementById('btn-quit')?.addEventListener('click', () => {
+			this.audioSys?.playSelect();
+			gs.phase = 'menu';
+			gs.dirty = true;
+		});
+
+		// HUD pause button
+		this.hudPanel?.getElementById('btn-pause')?.addEventListener('click', () => {
+			this.audioSys?.playSelect();
+			this.gameSys?.pauseGame();
+		});
+
 		this.wired = true;
 		this.showPhase('menu');
 	}
@@ -108,13 +126,17 @@ export class UISystem extends createSystem({}) {
 	private showPhase(phase: GamePhase) {
 		this.settingsShown = false;
 		const m = phase === 'menu';
-		const p = phase === 'playing' || phase === 'wave_intro';
+		const p = phase === 'playing' || phase === 'wave_intro' || phase === 'wave_complete';
 		const g = phase === 'game_over';
+		const pa = phase === 'paused';
+		const w = phase === 'wave_intro' || phase === 'wave_complete';
 		if (this.menuPanel) this.menuPanel.visible = m;
-		if (this.hudPanel) this.hudPanel.visible = p;
-		if (this.orderPanel) this.orderPanel.visible = p;
+		if (this.hudPanel) this.hudPanel.visible = p || pa;
+		if (this.orderPanel) this.orderPanel.visible = phase === 'playing';
 		if (this.gameOverPanel) this.gameOverPanel.visible = g;
 		if (this.settingsPanel) this.settingsPanel.visible = false;
+		if (this.pausePanel) this.pausePanel.visible = pa;
+		if (this.wavePanel) this.wavePanel.visible = w;
 	}
 
 	private updateHUD() {
@@ -123,6 +145,10 @@ export class UISystem extends createSystem({}) {
 		this.hudPanel?.getElementById('wave')?.setProperties({ text: String(gs.wave) });
 		const hearts = '\u2665'.repeat(gs.lives);
 		this.hudPanel?.getElementById('lives')?.setProperties({ text: hearts || '---' });
+		// High score
+		this.hudPanel?.getElementById('highscore')?.setProperties({
+			text: gs.score > gs.highScore ? String(gs.score) : String(gs.highScore),
+		});
 	}
 
 	private updateOrder() {
@@ -132,11 +158,13 @@ export class UISystem extends createSystem({}) {
 			this.orderPanel?.getElementById('order-metal')?.setProperties({ text: '' });
 			return;
 		}
-		const name = `${METAL_NAMES[o.metalType]} ${ITEM_NAMES[o.itemType]}`;
+		const prefix = o.isGolden ? '* ' : '';
+		const name = `${prefix}${METAL_NAMES[o.metalType]} ${ITEM_NAMES[o.itemType]}`;
 		this.orderPanel?.getElementById('order-name')?.setProperties({ text: name });
-		this.orderPanel?.getElementById('order-metal')?.setProperties({ text: `Metal: ${METAL_NAMES[o.metalType]}` });
+		this.orderPanel?.getElementById('order-metal')?.setProperties({
+			text: o.isGolden ? 'GOLDEN ORDER!' : `Metal: ${METAL_NAMES[o.metalType]}`,
+		});
 
-		// Step indicators
 		const steps: [string, string][] = [
 			['step-heat', gs.workStep === 'heating' ? `${(gs.heatLevel * 100) | 0}%` : gs.heatLevel >= 1 ? 'DONE' : '---'],
 			['step-hammer', gs.workStep === 'hammering' || gs.workStep === 'hot' ? `${gs.hammerCount}/${o.hammerTarget}` : gs.hammerCount >= o.hammerTarget ? 'DONE' : '---'],
@@ -156,6 +184,23 @@ export class UISystem extends createSystem({}) {
 		this.gameOverPanel?.getElementById('go-waves')?.setProperties({ text: String(gs.wave) });
 		this.gameOverPanel?.getElementById('go-orders')?.setProperties({ text: String(gs.totalOrders) });
 		this.gameOverPanel?.getElementById('go-combo')?.setProperties({ text: `x${gs.maxCombo + 1}` });
+		const isNew = gs.score >= gs.highScore && gs.score > 0;
+		this.gameOverPanel?.getElementById('go-highscore')?.setProperties({
+			text: isNew ? `NEW! ${gs.score}` : String(gs.highScore),
+		});
+	}
+
+	private updateWavePanel() {
+		if (gs.phase === 'wave_intro') {
+			this.wavePanel?.getElementById('wave-title')?.setProperties({ text: `WAVE ${gs.wave}` });
+			this.wavePanel?.getElementById('wave-sub')?.setProperties({
+				text: `${gs.ordersTarget} orders to fill`,
+			});
+		} else if (gs.phase === 'wave_complete') {
+			this.wavePanel?.getElementById('wave-title')?.setProperties({ text: 'WAVE COMPLETE!' });
+			const bonus = gs.perfectWave ? `+${gs.wave * 100} PERFECT BONUS` : 'Next wave incoming...';
+			this.wavePanel?.getElementById('wave-sub')?.setProperties({ text: bonus });
+		}
 	}
 
 	update(delta: number) {
@@ -177,11 +222,9 @@ export class UISystem extends createSystem({}) {
 				this.updateGameOver();
 				this.audioSys?.playFail();
 			}
-		}
-
-		// Wave intro overlay on HUD
-		if (gs.phase === 'wave_intro') {
-			this.hudPanel?.getElementById('score')?.setProperties({ text: `WAVE ${gs.wave}` });
+			if (gs.phase === 'wave_intro' || gs.phase === 'wave_complete') {
+				this.updateWavePanel();
+			}
 		}
 
 		if (!gs.dirty) return;
@@ -190,6 +233,11 @@ export class UISystem extends createSystem({}) {
 		if (gs.phase === 'playing') {
 			this.updateHUD();
 			this.updateOrder();
+		} else if (gs.phase === 'wave_intro' || gs.phase === 'wave_complete') {
+			this.updateHUD();
+			this.updateWavePanel();
+		} else if (gs.phase === 'paused') {
+			this.updateHUD();
 		}
 	}
 }

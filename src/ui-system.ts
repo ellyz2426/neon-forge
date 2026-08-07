@@ -39,7 +39,9 @@ export class UISystem extends createSystem({}) {
 		// Find sibling systems via world
 		for (const sys of (this.world as any)._systems || []) {
 			if (sys instanceof GameSystem) this.gameSys = sys;
-			if (sys instanceof AudioSystem) this.audioSys = sys;
+			if (sys instanceof AudioSystem) {
+				this.audioSys = sys;
+			}
 		}
 
 		// Menu buttons

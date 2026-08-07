@@ -4,6 +4,10 @@ import { gs } from './game-state.js';
 export class AudioSystem extends createSystem({}) {
 	private ctx: AudioContext | null = null;
 	private masterGain: GainNode | null = null;
+	private droneOsc1: OscillatorNode | null = null;
+	private droneOsc2: OscillatorNode | null = null;
+	private droneGain: GainNode | null = null;
+	private droneActive = false;
 
 	init() {
 		try {
@@ -14,6 +18,53 @@ export class AudioSystem extends createSystem({}) {
 		} catch {
 			/* audio unavailable */
 		}
+	}
+
+	public startDrone() {
+		if (!this.ctx || !this.masterGain || this.droneActive) return;
+		this.resumeCtx();
+		this.droneGain = this.ctx.createGain();
+		this.droneGain.gain.value = 0;
+		this.droneGain.gain.linearRampToValueAtTime(0.08, this.ctx.currentTime + 1.5);
+		this.droneGain.connect(this.masterGain);
+
+		// Low rumble
+		this.droneOsc1 = this.ctx.createOscillator();
+		this.droneOsc1.type = 'sawtooth';
+		this.droneOsc1.frequency.value = 55;
+		const lp = this.ctx.createBiquadFilter();
+		lp.type = 'lowpass';
+		lp.frequency.value = 120;
+		lp.Q.value = 1;
+		this.droneOsc1.connect(lp).connect(this.droneGain);
+		this.droneOsc1.start();
+
+		// Sub harmonic
+		this.droneOsc2 = this.ctx.createOscillator();
+		this.droneOsc2.type = 'sine';
+		this.droneOsc2.frequency.value = 27.5;
+		const g2 = this.ctx.createGain();
+		g2.gain.value = 0.6;
+		this.droneOsc2.connect(g2).connect(this.droneGain);
+		this.droneOsc2.start();
+
+		this.droneActive = true;
+	}
+
+	public stopDrone() {
+		if (!this.ctx || !this.droneActive) return;
+		const t = this.ctx.currentTime;
+		if (this.droneGain) {
+			this.droneGain.gain.linearRampToValueAtTime(0, t + 0.5);
+		}
+		setTimeout(() => {
+			this.droneOsc1?.stop();
+			this.droneOsc2?.stop();
+			this.droneOsc1 = null;
+			this.droneOsc2 = null;
+			this.droneGain = null;
+			this.droneActive = false;
+		}, 600);
 	}
 
 	public playHammer() {
@@ -146,6 +197,19 @@ export class AudioSystem extends createSystem({}) {
 		if (this.fireTimer <= 0 && gs.phase === 'playing') {
 			this.playFireCrackle();
 			this.fireTimer = 0.3 + Math.random() * 0.5;
+		}
+
+		// Manage ambient drone
+		if (gs.phase === 'playing' && gs.musicEnabled && !this.droneActive) {
+			this.startDrone();
+		} else if ((!gs.musicEnabled || gs.phase !== 'playing') && this.droneActive) {
+			this.stopDrone();
+		}
+
+		// Update drone gain with music toggle
+		if (this.droneGain && this.droneActive) {
+			const target = gs.musicEnabled ? 0.08 : 0;
+			this.droneGain.gain.value += (target - this.droneGain.gain.value) * 0.1;
 		}
 	}
 }

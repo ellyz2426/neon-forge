@@ -6,14 +6,18 @@ import {
 	CylinderGeometry,
 	PlaneGeometry,
 	SphereGeometry,
+	ConeGeometry,
+	TorusGeometry,
 	PointLight,
 	Group,
+	Scene,
 	Vector3,
 	Color,
 	Pressed,
 	RayInteractable,
 } from '@iwsdk/core';
 import { ForgeStation } from './components.js';
+import { AudioSystem } from './audio-system.js';
 import {
 	gs,
 	ITEM_NAMES,
@@ -44,13 +48,26 @@ export class GameSystem extends createSystem({
 	private workpiece!: Mesh;
 	private workpieceMat!: MeshStandardMaterial;
 	private sparkGroup!: Group;
+	private smokeGroup!: Group;
+	private steamGroup!: Group;
 	private stationGlows: Mesh[] = [];
 	private elapsed = 0;
 	private activeStation = -1;
+	private audioSys: AudioSystem | null = null;
+	private anvilTop: Mesh | null = null;
+	private anvilBounceTimer = 0;
 
 	init() {
 		this.buildEnvironment();
 		this.createWorkpiece();
+		this.createSmokeParticles();
+		this.createSteamParticles();
+
+		// Find AudioSystem
+		for (const sys of (this.world as any)._systems || []) {
+			if (sys instanceof AudioSystem) this.audioSys = sys;
+		}
+
 		this.queries.pressedStations.subscribe('qualify', (entity) => {
 			if (gs.phase !== 'playing') return;
 			const t = entity.getValue(ForgeStation, 'stationType') as number;
@@ -91,6 +108,51 @@ export class GameSystem extends createSystem({
 		rw.position.set(4, 3, -0.5);
 		sc.add(rw);
 
+		// Ceiling
+		const ceilMat = new MeshStandardMaterial({
+			color: 0x080808,
+			roughness: 0.95,
+		});
+		const ceiling = new Mesh(new PlaneGeometry(16, 16), ceilMat);
+		ceiling.rotation.x = Math.PI / 2;
+		ceiling.position.y = 5;
+		sc.add(ceiling);
+
+		// Wooden beams across ceiling
+		const beamMat = new MeshStandardMaterial({
+			color: 0x2a1a0a,
+			roughness: 0.85,
+		});
+		for (let i = -3; i <= 3; i += 2) {
+			const beam = new Mesh(new BoxGeometry(8.5, 0.2, 0.25), beamMat);
+			beam.position.set(0, 4.85, i * 0.8 - 0.5);
+			sc.add(beam);
+		}
+
+		// Chimney / hood above forge
+		const chimneyMat = new MeshStandardMaterial({
+			color: 0x1a1210,
+			roughness: 0.8,
+			metalness: 0.3,
+		});
+		// Hood base (wide cone above forge)
+		const hood = new Mesh(new ConeGeometry(0.8, 0.6, 6), chimneyMat);
+		hood.position.set(-0.9, 2.0, -2.0);
+		sc.add(hood);
+		// Chimney pipe
+		const chimPipe = new Mesh(new CylinderGeometry(0.25, 0.35, 2.5, 6), chimneyMat);
+		chimPipe.position.set(-0.9, 3.55, -2.0);
+		sc.add(chimPipe);
+
+		// Tool rack on back wall (near anvil)
+		this.buildToolRack(sc);
+
+		// Hanging chains from beams
+		this.buildHangingChains(sc);
+
+		// Decorative wall swords
+		this.buildWallSwords(sc);
+
 		// Forge fire lights
 		this.fireLight = new PointLight(0xff6600, 3, 8);
 		this.fireLight.position.set(-0.9, 1.4, -2.0);
@@ -107,6 +169,101 @@ export class GameSystem extends createSystem({
 		// Build each station
 		for (let i = 0; i < 5; i++) {
 			this.buildStation(i);
+		}
+	}
+
+	private buildToolRack(sc: Scene) {
+		const rackMat = new MeshStandardMaterial({
+			color: 0x2a1a0a,
+			roughness: 0.85,
+		});
+		const metalMat = new MeshStandardMaterial({
+			color: 0x666677,
+			metalness: 0.8,
+			roughness: 0.25,
+		});
+
+		// Rack board on wall
+		const board = new Mesh(new BoxGeometry(1.2, 0.08, 0.12), rackMat);
+		board.position.set(0.0, 1.8, -3.85);
+		sc.add(board);
+
+		// Hammer — handle + head
+		const hammerHandle = new Mesh(new CylinderGeometry(0.02, 0.02, 0.45, 6), rackMat);
+		hammerHandle.rotation.z = Math.PI / 4;
+		hammerHandle.position.set(-0.35, 1.95, -3.82);
+		sc.add(hammerHandle);
+		const hammerHead = new Mesh(new BoxGeometry(0.12, 0.07, 0.07), metalMat);
+		hammerHead.position.set(-0.19, 2.11, -3.82);
+		sc.add(hammerHead);
+
+		// Tongs — two legs
+		const tongsMat = new MeshStandardMaterial({
+			color: 0x555555,
+			metalness: 0.7,
+			roughness: 0.3,
+		});
+		for (let i = 0; i < 2; i++) {
+			const leg = new Mesh(new CylinderGeometry(0.012, 0.015, 0.5, 5), tongsMat);
+			leg.rotation.z = Math.PI / 6;
+			leg.position.set(0.1 + i * 0.04, 1.95, -3.82);
+			sc.add(leg);
+		}
+
+		// Pegs
+		for (let i = -1; i <= 1; i++) {
+			const peg = new Mesh(new CylinderGeometry(0.015, 0.015, 0.1, 5), metalMat);
+			peg.rotation.x = Math.PI / 2;
+			peg.position.set(i * 0.4, 1.8, -3.8);
+			sc.add(peg);
+		}
+	}
+
+	private buildHangingChains(sc: Scene) {
+		const chainMat = new MeshStandardMaterial({
+			color: 0x444444,
+			metalness: 0.9,
+			roughness: 0.2,
+		});
+		// Two chains hanging from beams
+		const chainPositions = [[-2.5, -1.3], [2.0, -1.3]];
+		for (const [cx, cz] of chainPositions) {
+			for (let j = 0; j < 5; j++) {
+				const link = new Mesh(new TorusGeometry(0.03, 0.008, 6, 6), chainMat);
+				link.position.set(cx, 4.5 - j * 0.12, cz);
+				link.rotation.x = j % 2 === 0 ? 0 : Math.PI / 2;
+				sc.add(link);
+			}
+			// Hook at bottom
+			const hook = new Mesh(new ConeGeometry(0.025, 0.06, 5), chainMat);
+			hook.position.set(cx, 3.85, cz);
+			sc.add(hook);
+		}
+	}
+
+	private buildWallSwords(sc: Scene) {
+		const bladeMat = new MeshStandardMaterial({
+			color: 0x8899aa,
+			metalness: 0.9,
+			roughness: 0.15,
+			emissive: 0x222233,
+			emissiveIntensity: 0.1,
+		});
+		const hiltMat = new MeshStandardMaterial({
+			color: 0x3a2a1a,
+			roughness: 0.8,
+		});
+		// Two crossed swords on back wall
+		for (let s = 0; s < 2; s++) {
+			const angle = s === 0 ? 0.3 : -0.3;
+			const blade = new Mesh(new BoxGeometry(0.04, 0.65, 0.015), bladeMat);
+			blade.position.set(2.5, 2.8, -3.88);
+			blade.rotation.z = angle;
+			sc.add(blade);
+			const hilt = new Mesh(new BoxGeometry(0.18, 0.04, 0.025), hiltMat);
+			hilt.position.set(2.5 - Math.sin(angle) * 0.3, 2.5, -3.87);
+			hilt.rotation.z = angle;
+			sc.add(hilt);
 		}
 	}
 
@@ -209,6 +366,7 @@ export class GameSystem extends createSystem({
 				const top = new Mesh(new BoxGeometry(0.55, 0.12, 0.28), anvilMat);
 				top.position.y = 0.62;
 				g.add(top);
+				this.anvilTop = top;
 				const horn = new Mesh(
 					new CylinderGeometry(0.02, 0.1, 0.2, 6),
 					anvilMat,
@@ -330,6 +488,71 @@ export class GameSystem extends createSystem({
 		this.world.scene.add(this.sparkGroup);
 	}
 
+	/* ─── Smoke Particles (from forge) ───────────────────────── */
+
+	private createSmokeParticles() {
+		this.smokeGroup = new Group();
+		this.smokeGroup.position.set(-0.9, 1.5, -2.0);
+		for (let i = 0; i < 8; i++) {
+			const smokeMat = new MeshStandardMaterial({
+				color: 0x444444,
+				transparent: true,
+				opacity: 0,
+			});
+			const sp = new Mesh(new SphereGeometry(0.04 + Math.random() * 0.03, 5, 4), smokeMat);
+			sp.userData.vel = 0.3 + Math.random() * 0.2;
+			sp.userData.drift = (Math.random() - 0.5) * 0.15;
+			sp.userData.phase = Math.random() * Math.PI * 2;
+			sp.userData.maxLife = 2.5 + Math.random();
+			sp.userData.life = Math.random() * sp.userData.maxLife;
+			sp.position.set(
+				(Math.random() - 0.5) * 0.15,
+				sp.userData.life * sp.userData.vel,
+				(Math.random() - 0.5) * 0.15,
+			);
+			this.smokeGroup.add(sp);
+		}
+		this.world.scene.add(this.smokeGroup);
+	}
+
+	/* ─── Steam Particles (from quench trough) ──────────────── */
+
+	private createSteamParticles() {
+		this.steamGroup = new Group();
+		this.steamGroup.position.set(0.9, 0.6, -2.0);
+		this.steamGroup.visible = false;
+		for (let i = 0; i < 10; i++) {
+			const steamMat = new MeshStandardMaterial({
+				color: 0xccccdd,
+				transparent: true,
+				opacity: 0,
+			});
+			const sp = new Mesh(new SphereGeometry(0.025 + Math.random() * 0.02, 5, 4), steamMat);
+			sp.userData.vel = 0.6 + Math.random() * 0.4;
+			sp.userData.drift = (Math.random() - 0.5) * 0.3;
+			sp.userData.maxLife = 1.0 + Math.random() * 0.5;
+			sp.userData.life = 0;
+			sp.visible = false;
+			this.steamGroup.add(sp);
+		}
+		this.world.scene.add(this.steamGroup);
+	}
+
+	private triggerSteam() {
+		this.steamGroup.visible = true;
+		for (const sp of this.steamGroup.children) {
+			const m = sp as Mesh;
+			m.position.set(
+				(Math.random() - 0.5) * 0.3,
+				0,
+				(Math.random() - 0.5) * 0.15,
+			);
+			m.userData.life = m.userData.maxLife;
+			m.visible = true;
+			(m.material as MeshStandardMaterial).opacity = 0.6;
+		}
+	}
+
 	/* ─── Game Logic ─────────────────────────────────────────── */
 
 	public startGame() {
@@ -416,6 +639,7 @@ export class GameSystem extends createSystem({
 			case 1: // Forge — heat (auto-heats in update, click to boost)
 				if (gs.workStep === 'heating') {
 					gs.heatLevel = Math.min(1, gs.heatLevel + 0.15);
+					this.audioSys?.playFireCrackle();
 					gs.dirty = true;
 				}
 				break;
@@ -424,6 +648,8 @@ export class GameSystem extends createSystem({
 					gs.workStep = 'hammering';
 					gs.hammerCount++;
 					this.triggerSparks();
+					this.audioSys?.playHammer();
+					this.anvilBounceTimer = 0.15;
 					if (gs.hammerCount >= o.hammerTarget) {
 						gs.workStep = 'forged';
 						this.moveWorkpiece(3);
@@ -435,6 +661,8 @@ export class GameSystem extends createSystem({
 			case 3: // Trough — quench
 				if (gs.workStep === 'forged') {
 					gs.workStep = 'quenching';
+					this.audioSys?.playQuench();
+					this.triggerSteam();
 					gs.dirty = true;
 					setTimeout(() => {
 						if (gs.workStep === 'quenching') {
@@ -467,6 +695,7 @@ export class GameSystem extends createSystem({
 		gs.workStep = 'idle';
 		this.workpiece.visible = false;
 		this.sparkGroup.visible = false;
+		this.audioSys?.playComplete();
 		gs.dirty = true;
 		this.clearGlows();
 		this.nextOrder();
@@ -478,6 +707,7 @@ export class GameSystem extends createSystem({
 		gs.workStep = 'idle';
 		this.workpiece.visible = false;
 		this.sparkGroup.visible = false;
+		this.audioSys?.playFail();
 		gs.dirty = true;
 		this.clearGlows();
 		if (gs.lives <= 0) {
@@ -617,6 +847,54 @@ export class GameSystem extends createSystem({
 				}
 			}
 			if (!anyAlive) this.sparkGroup.visible = false;
+		}
+
+		// Smoke particles (always rising from forge)
+		for (const sp of this.smokeGroup.children) {
+			const m = sp as Mesh;
+			m.userData.life += delta;
+			if (m.userData.life >= m.userData.maxLife) {
+				m.userData.life = 0;
+				m.position.set(
+					(Math.random() - 0.5) * 0.15,
+					0,
+					(Math.random() - 0.5) * 0.15,
+				);
+			}
+			const t2 = m.userData.life / m.userData.maxLife;
+			m.position.y = m.userData.life * m.userData.vel;
+			m.position.x += m.userData.drift * delta;
+			const mat = m.material as MeshStandardMaterial;
+			mat.opacity = t2 < 0.2 ? t2 * 3 : Math.max(0, 0.6 * (1 - t2));
+			m.scale.setScalar(1 + t2 * 2);
+		}
+
+		// Steam particles (when quenching)
+		if (this.steamGroup.visible) {
+			let anyAlive2 = false;
+			for (const sp of this.steamGroup.children) {
+				const m = sp as Mesh;
+				if (m.userData.life > 0) {
+					m.userData.life -= delta;
+					m.position.y += m.userData.vel * delta;
+					m.position.x += m.userData.drift * delta;
+					const mat = m.material as MeshStandardMaterial;
+					const r = m.userData.life / m.userData.maxLife;
+					mat.opacity = r * 0.6;
+					m.scale.setScalar(1 + (1 - r) * 3);
+					anyAlive2 = true;
+				} else {
+					m.visible = false;
+				}
+			}
+			if (!anyAlive2) this.steamGroup.visible = false;
+		}
+
+		// Anvil bounce
+		if (this.anvilBounceTimer > 0 && this.anvilTop) {
+			this.anvilBounceTimer -= delta;
+			const bounce = Math.sin(this.anvilBounceTimer * 40) * this.anvilBounceTimer * 0.15;
+			this.anvilTop.position.y = 0.62 + bounce;
 		}
 
 		gs.dirty = true; // timer always changes

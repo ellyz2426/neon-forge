@@ -16,7 +16,7 @@ import {
 	Pressed,
 	RayInteractable,
 } from '@iwsdk/core';
-import { ForgeStation } from './components.js';
+import { ForgeStation, BellowsInteract } from './components.js';
 import { AudioSystem } from './audio-system.js';
 import {
 	gs,
@@ -43,6 +43,7 @@ const DIFF_MULT: Record<string, number> = { easy: 1.3, normal: 1.0, hard: 0.7 };
 
 export class GameSystem extends createSystem({
 	pressedStations: { required: [ForgeStation, Pressed] },
+	pressedBellows: { required: [BellowsInteract, Pressed] },
 }) {
 	private fireLight!: PointLight;
 	private fireLightAlt!: PointLight;
@@ -63,12 +64,18 @@ export class GameSystem extends createSystem({
 	private goldenGlow: Mesh | null = null;
 	private torchLights: PointLight[] = [];
 	private customerGroup: Group | null = null;
+	private bellowsBoost = 0;
+	private bellowsGroup: Group | null = null;
+	private bellowsPuffGroup: Group | null = null;
+	private customerBounceTimer = 0;
+	private emberGroup: Group | null = null;
 
 	init() {
 		this.buildEnvironment();
 		this.createWorkpiece();
 		this.createSmokeParticles();
 		this.createSteamParticles();
+		this.createEmberParticles();
 
 		// Find AudioSystem
 		for (const sys of (this.world as any)._systems || []) {
@@ -79,6 +86,11 @@ export class GameSystem extends createSystem({
 			if (gs.phase !== 'playing') return;
 			const t = entity.getValue(ForgeStation, 'stationType') as number;
 			this.handleStation(t);
+		});
+
+		this.queries.pressedBellows.subscribe('qualify', () => {
+			if (gs.phase !== 'playing') return;
+			this.handleBellows();
 		});
 	}
 
@@ -270,31 +282,65 @@ export class GameSystem extends createSystem({
 		const leatherMat = new MeshStandardMaterial({ color: 0x2a1a0a, roughness: 0.9 });
 		const metalMat = new MeshStandardMaterial({ color: 0x555566, metalness: 0.8, roughness: 0.2 });
 
+		this.bellowsGroup = new Group();
+		this.bellowsGroup.position.set(-1.7, 0, -2.3);
+
 		// Bellows body — two wedge-like boards
 		const topBoard = new Mesh(new BoxGeometry(0.35, 0.03, 0.25), woodMat);
-		topBoard.position.set(-1.7, 0.65, -2.3);
+		topBoard.position.y = 0.65;
 		topBoard.rotation.z = 0.15;
-		sc.add(topBoard);
+		this.bellowsGroup.add(topBoard);
 		const botBoard = new Mesh(new BoxGeometry(0.35, 0.03, 0.25), woodMat);
-		botBoard.position.set(-1.7, 0.52, -2.3);
+		botBoard.position.y = 0.52;
 		botBoard.rotation.z = -0.1;
-		sc.add(botBoard);
+		this.bellowsGroup.add(botBoard);
 
 		// Leather middle
 		const middle = new Mesh(new BoxGeometry(0.3, 0.1, 0.22), leatherMat);
-		middle.position.set(-1.7, 0.585, -2.3);
-		sc.add(middle);
+		middle.position.y = 0.585;
+		this.bellowsGroup.add(middle);
 
 		// Nozzle
 		const nozzle = new Mesh(new CylinderGeometry(0.03, 0.05, 0.15, 6), metalMat);
 		nozzle.rotation.z = Math.PI / 2;
-		nozzle.position.set(-1.5, 0.58, -2.3);
-		sc.add(nozzle);
+		nozzle.position.set(0.2, 0.58, 0);
+		this.bellowsGroup.add(nozzle);
 
 		// Handle
 		const handle = new Mesh(new CylinderGeometry(0.02, 0.02, 0.2, 5), woodMat);
-		handle.position.set(-1.92, 0.68, -2.3);
-		sc.add(handle);
+		handle.position.set(-0.22, 0.68, 0);
+		this.bellowsGroup.add(handle);
+
+		// Glow ring for bellows
+		const glowMat = new MeshStandardMaterial({
+			color: 0x44aaff, emissive: 0x44aaff, emissiveIntensity: 1.5,
+			transparent: true, opacity: 0,
+		});
+		const glow = new Mesh(new CylinderGeometry(0.3, 0.3, 0.02, 16), glowMat);
+		glow.position.y = 0.5;
+		this.bellowsGroup.add(glow);
+
+		sc.add(this.bellowsGroup);
+		const ent = this.world.createTransformEntity(this.bellowsGroup);
+		ent.addComponent(BellowsInteract);
+		ent.addComponent(RayInteractable);
+
+		// Bellows air puff particles
+		this.bellowsPuffGroup = new Group();
+		this.bellowsPuffGroup.position.set(-1.5, 0.58, -2.3);
+		this.bellowsPuffGroup.visible = false;
+		for (let i = 0; i < 6; i++) {
+			const puffMat = new MeshStandardMaterial({
+				color: 0xccddff, transparent: true, opacity: 0,
+				emissive: 0x4488ff, emissiveIntensity: 0.3,
+			});
+			const puff = new Mesh(new SphereGeometry(0.02 + Math.random() * 0.015, 5, 4), puffMat);
+			puff.userData.life = 0;
+			puff.userData.maxLife = 0.4 + Math.random() * 0.3;
+			puff.visible = false;
+			this.bellowsPuffGroup.add(puff);
+		}
+		sc.add(this.bellowsPuffGroup);
 	}
 
 	private buildBarrelAndCrates(sc: Scene) {
@@ -733,6 +779,67 @@ export class GameSystem extends createSystem({
 		this.world.scene.add(this.smokeGroup);
 	}
 
+	/* ─── Bellows Interaction ─────────────────────────────────── */
+
+	private handleBellows() {
+		if (gs.workStep !== 'heating') return;
+		// Boost heat rate for 2 seconds
+		this.bellowsBoost = 2.0;
+		this.audioSys?.playBellows();
+		this.triggerBellowsPuff();
+		// Animate bellows squeeze
+		if (this.bellowsGroup) {
+			const top = this.bellowsGroup.children[0];
+			const bot = this.bellowsGroup.children[1];
+			if (top && bot) {
+				top.position.y = 0.61;
+				bot.position.y = 0.56;
+				setTimeout(() => {
+					top.position.y = 0.65;
+					bot.position.y = 0.52;
+				}, 200);
+			}
+		}
+	}
+
+	private triggerBellowsPuff() {
+		if (!this.bellowsPuffGroup) return;
+		this.bellowsPuffGroup.visible = true;
+		for (const sp of this.bellowsPuffGroup.children) {
+			const m = sp as Mesh;
+			m.position.set(0, (Math.random() - 0.5) * 0.1, (Math.random() - 0.5) * 0.1);
+			m.userData.life = m.userData.maxLife;
+			m.visible = true;
+			(m.material as MeshStandardMaterial).opacity = 0.5;
+		}
+	}
+
+	/* ─── Ember Particles ─────────────────────────────────────── */
+
+	private createEmberParticles() {
+		this.emberGroup = new Group();
+		this.emberGroup.position.set(-0.9, 0.9, -2.0);
+		for (let i = 0; i < 10; i++) {
+			const emberMat = new MeshStandardMaterial({
+				color: 0xff6600, emissive: 0xff4400, emissiveIntensity: 3.0,
+				transparent: true, opacity: 0,
+			});
+			const ember = new Mesh(new SphereGeometry(0.008 + Math.random() * 0.006, 4, 3), emberMat);
+			ember.userData.vel = 0.15 + Math.random() * 0.25;
+			ember.userData.drift = (Math.random() - 0.5) * 0.2;
+			ember.userData.driftZ = (Math.random() - 0.5) * 0.1;
+			ember.userData.maxLife = 1.5 + Math.random() * 1.5;
+			ember.userData.life = Math.random() * ember.userData.maxLife;
+			ember.position.set(
+				(Math.random() - 0.5) * 0.4,
+				ember.userData.life * ember.userData.vel,
+				(Math.random() - 0.5) * 0.3,
+			);
+			this.emberGroup.add(ember);
+		}
+		this.world.scene.add(this.emberGroup);
+	}
+
 	/* ─── Steam Particles ───────────────────────────────────── */
 
 	private createSteamParticles() {
@@ -947,6 +1054,7 @@ export class GameSystem extends createSystem({
 		this.sparkGroup.visible = false;
 		if (this.goldenGlow) this.goldenGlow.visible = false;
 		this.audioSys?.playComplete();
+		this.customerBounceTimer = 0.6; // Trigger customer delivery reaction
 		gs.dirty = true;
 		this.clearGlows();
 		this.nextOrder();
@@ -1033,9 +1141,21 @@ export class GameSystem extends createSystem({
 			tl.intensity = 1.0 + Math.sin(time * 7 + i * 1.7) * 0.35 + Math.sin(time * 13 + i * 2.3) * 0.2;
 		}
 
-		// Customer idle bob
+		// Customer idle bob + delivery bounce
 		if (this.customerGroup) {
-			this.customerGroup.position.y = Math.sin(time * 1.5) * 0.02;
+			const baseBob = Math.sin(time * 1.5) * 0.02;
+			if (this.customerBounceTimer > 0) {
+				this.customerBounceTimer -= delta;
+				const bounce = Math.sin(this.customerBounceTimer * 20) * this.customerBounceTimer * 0.15;
+				this.customerGroup.position.y = baseBob + bounce;
+				// Nod by rotating head slightly
+				const head = this.customerGroup.children[2];
+				if (head) head.rotation.x = Math.sin(this.customerBounceTimer * 15) * 0.2;
+			} else {
+				this.customerGroup.position.y = baseBob;
+				const head = this.customerGroup.children[2];
+				if (head) head.rotation.x = 0;
+			}
 		}
 
 		// Delivery flash — brief white pulse on ambient
@@ -1124,9 +1244,47 @@ export class GameSystem extends createSystem({
 			return;
 		}
 
+		// Bellows boost timer
+		if (this.bellowsBoost > 0) {
+			this.bellowsBoost -= delta;
+		}
+
+		// Bellows puff particles
+		if (this.bellowsPuffGroup && this.bellowsPuffGroup.visible) {
+			let anyPuff = false;
+			for (const sp of this.bellowsPuffGroup.children) {
+				const m = sp as Mesh;
+				if (m.userData.life > 0) {
+					m.userData.life -= delta;
+					m.position.x += 0.8 * delta; // Move toward forge
+					m.position.y += (Math.random() - 0.5) * delta * 0.3;
+					const mat = m.material as MeshStandardMaterial;
+					const r = m.userData.life / m.userData.maxLife;
+					mat.opacity = r * 0.4;
+					m.scale.setScalar(1 + (1 - r) * 2);
+					anyPuff = true;
+				} else {
+					m.visible = false;
+				}
+			}
+			if (!anyPuff) this.bellowsPuffGroup.visible = false;
+		}
+
+		// Bellows glow indicator (shows when heating is active)
+		if (this.bellowsGroup) {
+			const glowRing = this.bellowsGroup.children[this.bellowsGroup.children.length - 1] as Mesh;
+			if (glowRing && glowRing.material) {
+				const mat = glowRing.material as MeshStandardMaterial;
+				const showGlow = gs.phase === 'playing' && gs.workStep === 'heating';
+				const targetOpacity = showGlow ? 0.25 + Math.sin(time * 4) * 0.15 : 0;
+				mat.opacity += (targetOpacity - mat.opacity) * Math.min(1, delta * 8);
+			}
+		}
+
 		// Heating logic
 		if (gs.workStep === 'heating') {
-			gs.heatLevel += delta * 0.12;
+			const heatRate = this.bellowsBoost > 0 ? 0.3 : 0.12;
+			gs.heatLevel += delta * heatRate;
 			if (gs.heatLevel >= 1) {
 				gs.heatLevel = 1;
 				gs.workStep = 'hot';
@@ -1136,6 +1294,19 @@ export class GameSystem extends createSystem({
 			this.workpieceMat.emissive.setHex(0xff4400);
 			this.workpieceMat.emissiveIntensity = gs.heatLevel * 1.5;
 			gs.dirty = true;
+		}
+
+		// Persist heat glow during hot/hammering, gradually fading
+		if (gs.workStep === 'hot' || gs.workStep === 'hammering') {
+			this.workpieceMat.emissive.setHex(0xff4400);
+			const fadeProgress = gs.currentOrder ? gs.hammerCount / gs.currentOrder.hammerTarget : 0;
+			this.workpieceMat.emissiveIntensity = 1.5 * (1 - fadeProgress * 0.5);
+		}
+
+		// Forged — dim glow
+		if (gs.workStep === 'forged') {
+			this.workpieceMat.emissive.setHex(0xff2200);
+			this.workpieceMat.emissiveIntensity = 0.4;
 		}
 
 		// Quenching visual
@@ -1204,6 +1375,44 @@ export class GameSystem extends createSystem({
 				}
 			}
 			if (!anyAlive2) this.steamGroup.visible = false;
+		}
+
+		// Ember particles — always rising from forge
+		if (this.emberGroup) {
+			for (const sp of this.emberGroup.children) {
+				const m = sp as Mesh;
+				m.userData.life += delta;
+				if (m.userData.life >= m.userData.maxLife) {
+					m.userData.life = 0;
+					m.position.set(
+						(Math.random() - 0.5) * 0.4,
+						0,
+						(Math.random() - 0.5) * 0.3,
+					);
+					m.userData.vel = 0.15 + Math.random() * 0.25;
+					m.userData.drift = (Math.random() - 0.5) * 0.2;
+					m.userData.driftZ = (Math.random() - 0.5) * 0.1;
+					m.userData.maxLife = 1.5 + Math.random() * 1.5;
+				}
+				const t2 = m.userData.life / m.userData.maxLife;
+				m.position.y = m.userData.life * m.userData.vel;
+				m.position.x += m.userData.drift * delta;
+				m.position.z += m.userData.driftZ * delta;
+				const mat = m.material as MeshStandardMaterial;
+				// Fade in, glow, fade out
+				if (t2 < 0.1) {
+					mat.opacity = t2 * 8;
+				} else if (t2 > 0.7) {
+					mat.opacity = Math.max(0, (1 - t2) / 0.3) * 0.8;
+				} else {
+					mat.opacity = 0.8;
+				}
+				// Color shift: orange -> red -> dark as it rises
+				if (t2 > 0.5) {
+					mat.emissive.setHex(0xff2200);
+					mat.emissiveIntensity = 2.0 * (1 - t2);
+				}
+			}
 		}
 
 		// Anvil bounce

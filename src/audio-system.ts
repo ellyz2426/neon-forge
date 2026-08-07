@@ -185,6 +185,40 @@ export class AudioSystem extends createSystem({}) {
 		osc.stop(t + 0.1);
 	}
 
+	public playBellows() {
+		if (!this.ctx || !this.masterGain || !gs.soundEnabled) return;
+		this.resumeCtx();
+		const t = this.ctx.currentTime;
+		const dur = 0.35;
+		// Whoosh sound — filtered noise burst
+		const buf = this.ctx.createBuffer(1, (this.ctx.sampleRate * dur) | 0, this.ctx.sampleRate);
+		const data = buf.getChannelData(0);
+		for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1);
+		const src = this.ctx.createBufferSource();
+		src.buffer = buf;
+		const filt = this.ctx.createBiquadFilter();
+		filt.type = 'bandpass';
+		filt.frequency.setValueAtTime(800, t);
+		filt.frequency.exponentialRampToValueAtTime(200, t + dur);
+		filt.Q.value = 1.5;
+		const env = this.ctx.createGain();
+		env.gain.setValueAtTime(0.35, t);
+		env.gain.exponentialRampToValueAtTime(0.001, t + dur);
+		src.connect(filt).connect(env).connect(this.masterGain);
+		src.start(t);
+		// Add subtle low thump
+		const osc = this.ctx.createOscillator();
+		const thump = this.ctx.createGain();
+		osc.type = 'sine';
+		osc.frequency.setValueAtTime(100, t);
+		osc.frequency.exponentialRampToValueAtTime(40, t + 0.15);
+		thump.gain.setValueAtTime(0.2, t);
+		thump.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+		osc.connect(thump).connect(this.masterGain);
+		osc.start(t);
+		osc.stop(t + 0.15);
+	}
+
 	private resumeCtx() {
 		if (this.ctx && this.ctx.state === 'suspended') {
 			this.ctx.resume().catch(() => {});

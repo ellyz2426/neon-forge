@@ -149,6 +149,10 @@ export class UISystem extends createSystem({}) {
 		this.hudPanel?.getElementById('highscore')?.setProperties({
 			text: gs.score > gs.highScore ? String(gs.score) : String(gs.highScore),
 		});
+		// Difficulty indicator
+		this.hudPanel?.getElementById('difficulty')?.setProperties({
+			text: gs.difficulty.toUpperCase(),
+		});
 	}
 
 	private updateOrder() {
@@ -188,6 +192,13 @@ export class UISystem extends createSystem({}) {
 		this.gameOverPanel?.getElementById('go-highscore')?.setProperties({
 			text: isNew ? `NEW! ${gs.score}` : String(gs.highScore),
 		});
+		// Crafted stats
+		const craftedParts: string[] = [];
+		for (let i = 0; i < ITEM_NAMES.length; i++) {
+			if (gs.craftedByType[i] > 0) craftedParts.push(`${gs.craftedByType[i]} ${ITEM_NAMES[i]}`);
+		}
+		const craftedText = craftedParts.length > 0 ? craftedParts.join(', ') : '0';
+		this.gameOverPanel?.getElementById('go-crafted')?.setProperties({ text: craftedText });
 	}
 
 	private updateWavePanel() {

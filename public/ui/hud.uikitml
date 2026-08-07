@@ -41,6 +41,10 @@
     font-size: 14;
     color: #ffdd44;
   }
+  .diff-value {
+    font-size: 14;
+    color: #44ccff;
+  }
   .divider {
     width: 1;
     height: 40;
@@ -84,6 +88,11 @@
   <div class="stat-group">
     <div class="stat-label">LIVES</div>
     <div class="lives-value" id="lives">---</div>
+  </div>
+  <div class="divider"></div>
+  <div class="stat-group">
+    <div class="stat-label">DIFF</div>
+    <div class="diff-value" id="difficulty">NORMAL</div>
   </div>
   <div class="divider"></div>
   <div class="pause-btn" id="btn-pause">

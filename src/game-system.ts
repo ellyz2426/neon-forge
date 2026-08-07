@@ -24,7 +24,6 @@ import {
 	METAL_NAMES,
 	METAL_COLORS,
 	METAL_EMISSIVE,
-	ITEM_SHAPES,
 	saveHighScore,
 	type Order,
 	type WorkStep,
@@ -48,7 +47,7 @@ export class GameSystem extends createSystem({
 	private fireLight!: PointLight;
 	private fireLightAlt!: PointLight;
 	private ambientFill!: PointLight;
-	private workpiece!: Mesh;
+	private workpiece!: Group;
 	private workpieceMat!: MeshStandardMaterial;
 	private sparkGroup!: Group;
 	private smokeGroup!: Group;
@@ -62,6 +61,8 @@ export class GameSystem extends createSystem({
 	private displayWeapons: Mesh[] = [];
 	private displayWeaponMats: MeshStandardMaterial[] = [];
 	private goldenGlow: Mesh | null = null;
+	private torchLights: PointLight[] = [];
+	private customerGroup: Group | null = null;
 
 	init() {
 		this.buildEnvironment();
@@ -86,16 +87,32 @@ export class GameSystem extends createSystem({
 	private buildEnvironment() {
 		const sc = this.world.scene;
 
-		// Floor
-		const floorMat = new MeshStandardMaterial({
-			color: 0x111111,
-			roughness: 0.95,
-			metalness: 0.1,
-		});
-		const floor = new Mesh(new PlaneGeometry(16, 16), floorMat);
-		floor.rotation.x = -Math.PI / 2;
-		floor.receiveShadow = true;
-		sc.add(floor);
+		// Stone floor tiles
+		const tileShades = [0x151515, 0x181818, 0x1a1a1a, 0x1c1c1c, 0x131313];
+		const tileMats: MeshStandardMaterial[] = tileShades.map(
+			(c) => new MeshStandardMaterial({ color: c, roughness: 0.93, metalness: 0.05 }),
+		);
+		// Dark gap surface underneath tiles
+		const gapMat = new MeshStandardMaterial({ color: 0x050505, roughness: 1.0 });
+		const gapFloor = new Mesh(new PlaneGeometry(16, 16), gapMat);
+		gapFloor.rotation.x = -Math.PI / 2;
+		gapFloor.position.y = -0.025;
+		gapFloor.receiveShadow = true;
+		sc.add(gapFloor);
+		for (let tx = -4; tx <= 4; tx++) {
+			for (let tz = -4; tz <= 3; tz++) {
+				const mat = tileMats[Math.floor(Math.random() * tileMats.length)];
+				const tile = new Mesh(new BoxGeometry(0.9, 0.02, 0.9), mat);
+				tile.position.set(
+					tx + (Math.random() - 0.5) * 0.02,
+					-0.01,
+					tz + (Math.random() - 0.5) * 0.02,
+				);
+				tile.rotation.y = (Math.random() - 0.5) * 0.04;
+				tile.receiveShadow = true;
+				sc.add(tile);
+			}
+		}
 
 		// Back wall
 		const wallMat = new MeshStandardMaterial({
@@ -158,6 +175,11 @@ export class GameSystem extends createSystem({
 		this.buildBarrelAndCrates(sc);
 		this.buildWeaponDisplay(sc);
 		this.buildCoalBin(sc);
+
+		// Round 4 additions
+		this.buildTorches(sc);
+		this.buildWindow(sc);
+		this.buildCustomer(sc);
 
 		// Forge fire lights
 		this.fireLight = new PointLight(0xff6600, 3, 8);
@@ -360,6 +382,121 @@ export class GameSystem extends createSystem({
 		}
 	}
 
+	/* ─── Wall Torches ──────────────────────────────────────── */
+
+	private buildTorches(sc: Scene) {
+		const woodMat = new MeshStandardMaterial({ color: 0x3a2510, roughness: 0.85 });
+		const bracketMat = new MeshStandardMaterial({ color: 0x555566, metalness: 0.8, roughness: 0.2 });
+		const flameMat = new MeshStandardMaterial({
+			color: 0xff6600, emissive: 0xff4400, emissiveIntensity: 2.0,
+		});
+
+		const torchDefs: [number, number, number][] = [
+			[-3.88, 2.4, -1.2],
+			[-3.88, 2.4, -2.8],
+			[3.88, 2.4, -1.2],
+			[3.88, 2.4, -2.8],
+		];
+
+		for (const [tx, ty, tz] of torchDefs) {
+			const bracket = new Mesh(new BoxGeometry(0.08, 0.06, 0.14), bracketMat);
+			bracket.position.set(tx, ty, tz);
+			sc.add(bracket);
+
+			const handle = new Mesh(new CylinderGeometry(0.022, 0.022, 0.4, 6), woodMat);
+			handle.position.set(tx, ty + 0.22, tz);
+			sc.add(handle);
+
+			const flame = new Mesh(new SphereGeometry(0.055, 6, 5), flameMat.clone());
+			flame.position.set(tx, ty + 0.46, tz);
+			sc.add(flame);
+
+			const light = new PointLight(0xff6600, 1.2, 5);
+			light.position.set(tx, ty + 0.5, tz);
+			sc.add(light);
+			this.torchLights.push(light);
+		}
+	}
+
+	/* ─── Back Wall Window ──────────────────────────────────── */
+
+	private buildWindow(sc: Scene) {
+		const frameMat = new MeshStandardMaterial({ color: 0x2a1a0a, roughness: 0.85 });
+
+		// Night sky backdrop
+		const skyMat = new MeshStandardMaterial({
+			color: 0x0a0a2a, emissive: 0x110033, emissiveIntensity: 0.5,
+		});
+		const sky = new Mesh(new PlaneGeometry(1.2, 0.8), skyMat);
+		sky.position.set(-2.2, 2.8, -3.89);
+		sc.add(sky);
+
+		// Frame borders
+		const frameDefs: [number, number, number, number][] = [
+			[-2.2, 3.21, 1.3, 0.06],
+			[-2.2, 2.39, 1.3, 0.06],
+			[-2.81, 2.8, 0.06, 0.88],
+			[-1.59, 2.8, 0.06, 0.88],
+		];
+		for (const [fx, fy, fw, fh] of frameDefs) {
+			const f = new Mesh(new BoxGeometry(fw, fh, 0.06), frameMat);
+			f.position.set(fx, fy, -3.87);
+			sc.add(f);
+		}
+
+		// Moon
+		const moonMat = new MeshStandardMaterial({
+			color: 0xeeeedd, emissive: 0xffffcc, emissiveIntensity: 1.5,
+		});
+		const moon = new Mesh(new SphereGeometry(0.08, 8, 6), moonMat);
+		moon.position.set(-1.9, 3.0, -3.88);
+		sc.add(moon);
+
+		// Stars
+		const starMat = new MeshStandardMaterial({
+			color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 2.0,
+		});
+		const starDefs: [number, number][] = [
+			[-2.5, 3.05], [-2.35, 2.65], [-2.6, 2.85],
+			[-2.0, 2.55], [-1.75, 2.95], [-2.45, 2.5],
+			[-1.85, 2.7], [-2.15, 3.1],
+		];
+		for (const [sx, sy] of starDefs) {
+			const star = new Mesh(new SphereGeometry(0.012, 4, 3), starMat);
+			star.position.set(sx, sy, -3.88);
+			sc.add(star);
+		}
+	}
+
+	/* ─── Customer Silhouette ───────────────────────────────── */
+
+	private buildCustomer(sc: Scene) {
+		this.customerGroup = new Group();
+		this.customerGroup.position.set(2.2, 0, -1.0);
+
+		const darkMat = new MeshStandardMaterial({
+			color: 0x0a0a0a, roughness: 0.9,
+			emissive: 0x221133, emissiveIntensity: 0.15,
+		});
+
+		// Base / feet
+		const base = new Mesh(new BoxGeometry(0.3, 0.08, 0.2), darkMat);
+		base.position.y = 0.04;
+		this.customerGroup.add(base);
+
+		// Body
+		const body = new Mesh(new CylinderGeometry(0.15, 0.18, 0.7, 8), darkMat);
+		body.position.y = 0.43;
+		this.customerGroup.add(body);
+
+		// Head
+		const head = new Mesh(new SphereGeometry(0.12, 8, 6), darkMat);
+		head.position.y = 0.92;
+		this.customerGroup.add(head);
+
+		sc.add(this.customerGroup);
+	}
+
 	private buildStation(type: number) {
 		const g = new Group();
 		const [px, py, pz] = STATION_POSITIONS[type];
@@ -488,10 +625,7 @@ export class GameSystem extends createSystem({
 			color: 0x888888, emissive: 0x000000, emissiveIntensity: 0,
 			metalness: 0.7, roughness: 0.3,
 		});
-		this.workpiece = new Mesh(
-			new BoxGeometry(0.22, 0.08, 0.12),
-			this.workpieceMat,
-		);
+		this.workpiece = new Group();
 		this.workpiece.visible = false;
 		this.workpiece.position.set(0, 0.75, -1.8);
 		this.world.scene.add(this.workpiece);
@@ -528,6 +662,52 @@ export class GameSystem extends createSystem({
 			this.sparkGroup.add(sp);
 		}
 		this.world.scene.add(this.sparkGroup);
+	}
+
+	/* ─── Workpiece Shape Variety ────────────────────────────── */
+
+	private createWorkpieceShape(itemType: number) {
+		// Clear existing children
+		while (this.workpiece.children.length > 0) {
+			const child = this.workpiece.children[0];
+			if (child instanceof Mesh) child.geometry.dispose();
+			this.workpiece.remove(child);
+		}
+		switch (itemType) {
+			case 0: { // Sword — tall thin
+				const blade = new Mesh(new BoxGeometry(0.06, 0.35, 0.04), this.workpieceMat);
+				this.workpiece.add(blade);
+				break;
+			}
+			case 1: { // Axe — handle + head group
+				const handle = new Mesh(new CylinderGeometry(0.02, 0.02, 0.28, 6), this.workpieceMat);
+				this.workpiece.add(handle);
+				const head = new Mesh(new BoxGeometry(0.14, 0.1, 0.03), this.workpieceMat);
+				head.position.y = 0.12;
+				this.workpiece.add(head);
+				break;
+			}
+			case 2: { // Shield — flat disc
+				const disc = new Mesh(new CylinderGeometry(0.12, 0.12, 0.03, 12), this.workpieceMat);
+				disc.rotation.x = Math.PI / 2;
+				this.workpiece.add(disc);
+				break;
+			}
+			case 3: { // Dagger — cone
+				const cone = new Mesh(new ConeGeometry(0.035, 0.2, 6), this.workpieceMat);
+				this.workpiece.add(cone);
+				break;
+			}
+			case 4: { // Helmet — hemisphere
+				const hemi = new Mesh(
+					new SphereGeometry(0.09, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+					this.workpieceMat,
+				);
+				hemi.rotation.x = Math.PI;
+				this.workpiece.add(hemi);
+				break;
+			}
+		}
 	}
 
 	/* ─── Smoke Particles ───────────────────────────────────── */
@@ -601,6 +781,8 @@ export class GameSystem extends createSystem({
 		gs.currentOrder = null;
 		gs.deliveryFlashTimer = 0;
 		gs.perfectWave = true;
+		gs.craftedByType = [0, 0, 0, 0, 0];
+		gs.craftedByMetal = [0, 0, 0];
 		gs.dirty = true;
 		// Reset weapon display
 		for (const w of this.displayWeapons) w.visible = false;
@@ -677,9 +859,7 @@ export class GameSystem extends createSystem({
 					gs.heatLevel = 0;
 					this.moveWorkpiece(1);
 					// Shape workpiece based on item type
-					const shape = ITEM_SHAPES[o.itemType];
-					this.workpiece.geometry.dispose();
-					this.workpiece.geometry = new BoxGeometry(shape[0], shape[1], shape[2]);
+					this.createWorkpieceShape(o.itemType);
 					this.workpieceMat.color.setHex(METAL_COLORS[o.metalType]);
 					this.workpieceMat.emissive.setHex(0x000000);
 					this.workpieceMat.emissiveIntensity = 0;
@@ -749,6 +929,8 @@ export class GameSystem extends createSystem({
 		gs.score += points;
 		gs.ordersThisWave++;
 		gs.totalOrders++;
+		gs.craftedByType[o.itemType]++;
+		gs.craftedByMetal[o.metalType]++;
 		gs.workStep = 'idle';
 		gs.deliveryFlashTimer = 0.8;
 
@@ -843,6 +1025,17 @@ export class GameSystem extends createSystem({
 		if (this.fireLight) {
 			this.fireLight.intensity = 2.5 + Math.sin(time * 8) * 0.5 + Math.sin(time * 13) * 0.3;
 			this.fireLightAlt.intensity = 1.2 + Math.cos(time * 6) * 0.4;
+		}
+
+		// Torch flicker
+		for (let i = 0; i < this.torchLights.length; i++) {
+			const tl = this.torchLights[i];
+			tl.intensity = 1.0 + Math.sin(time * 7 + i * 1.7) * 0.35 + Math.sin(time * 13 + i * 2.3) * 0.2;
+		}
+
+		// Customer idle bob
+		if (this.customerGroup) {
+			this.customerGroup.position.y = Math.sin(time * 1.5) * 0.02;
 		}
 
 		// Delivery flash — brief white pulse on ambient

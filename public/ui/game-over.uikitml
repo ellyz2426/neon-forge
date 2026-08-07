@@ -83,6 +83,10 @@
     <div class="stat-value" id="go-combo">x1</div>
   </div>
   <div class="stat-row">
+    <div class="stat-label">ITEMS CRAFTED</div>
+    <div class="stat-value" id="go-crafted">0</div>
+  </div>
+  <div class="stat-row">
     <div class="hi-label">HIGH SCORE</div>
     <div class="hi-value" id="go-highscore">0</div>
   </div>

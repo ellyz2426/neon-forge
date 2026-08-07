@@ -49,6 +49,8 @@ export const gs = {
 	highScore: 0,
 	deliveryFlashTimer: 0,
 	perfectWave: true,
+	craftedByType: [0, 0, 0, 0, 0] as number[],
+	craftedByMetal: [0, 0, 0] as number[],
 };
 
 // Load high score from localStorage

@@ -1,0 +1,62 @@
+{
+  "version": "iwsdk.scene.v1",
+  "units": "meters",
+  "components": {
+    "com.iwsdk.components.DomeGradient": {
+      "sky": [0.02, 0.01, 0.0, 1],
+      "equator": [0.06, 0.03, 0.01, 1],
+      "ground": [0.04, 0.02, 0.01, 1],
+      "intensity": 0.3
+    },
+    "com.iwsdk.components.IBLGradient": {
+      "sky": [0.15, 0.08, 0.03, 1],
+      "equator": [0.2, 0.1, 0.04, 1],
+      "ground": [0.1, 0.06, 0.02, 1],
+      "intensity": 0.6
+    }
+  },
+  "resources": {},
+  "nodes": [
+    {
+      "id": "menu-panel",
+      "name": "Menu Panel",
+      "content": { "type": "asset", "asset": "menu-panel" },
+      "transform": { "position": [0, 1.6, -2.5], "scale": 0.4 },
+      "components": { "RayInteractable": {} }
+    },
+    {
+      "id": "hud-panel",
+      "name": "HUD Panel",
+      "content": { "type": "asset", "asset": "hud-panel" },
+      "transform": { "position": [0, 2.6, -2], "scale": 0.35 },
+      "components": {
+        "RayInteractable": {},
+        "ScreenSpace": { "top": "10px", "left": "25%", "width": "50vw", "height": "8%" }
+      }
+    },
+    {
+      "id": "order-panel",
+      "name": "Order Panel",
+      "content": { "type": "asset", "asset": "order-panel" },
+      "transform": { "position": [2.2, 1.5, -2.8], "rotationDeg": [0, -25, 0], "scale": 0.35 },
+      "components": {
+        "RayInteractable": {},
+        "ScreenSpace": { "top": "10px", "right": "10px", "width": "22vw", "height": "35%" }
+      }
+    },
+    {
+      "id": "game-over-panel",
+      "name": "Game Over Panel",
+      "content": { "type": "asset", "asset": "game-over-panel" },
+      "transform": { "position": [0, 1.6, -2.5], "scale": 0.4 },
+      "components": { "RayInteractable": {} }
+    },
+    {
+      "id": "settings-panel",
+      "name": "Settings Panel",
+      "content": { "type": "asset", "asset": "settings-panel" },
+      "transform": { "position": [0, 1.6, -2.5], "scale": 0.4 },
+      "components": { "RayInteractable": {} }
+    }
+  ]
+}

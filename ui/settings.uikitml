@@ -1,0 +1,94 @@
+<style>
+  .root {
+    flex-direction: column;
+    align-items: center;
+    padding: 20;
+    gap: 12;
+    background-color: rgba(20, 8, 0, 0.94);
+    border-radius: 16;
+    border-color: #ff8800;
+    border-width: 2;
+    width: 360;
+    height: 340;
+  }
+  .title {
+    font-size: 24;
+    color: #ff8800;
+    margin-bottom: 8;
+  }
+  .setting-row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    width: 280;
+    padding: 8;
+  }
+  .setting-label {
+    font-size: 16;
+    color: #cccccc;
+  }
+  .toggle-btn {
+    padding-top: 6;
+    padding-bottom: 6;
+    padding-left: 16;
+    padding-right: 16;
+    background-color: rgba(255, 136, 0, 0.25);
+    border-radius: 6;
+    border-color: #ff8800;
+    border-width: 1;
+    cursor: pointer;
+  }
+  .toggle-text {
+    font-size: 14;
+    color: #ffffff;
+  }
+  .divider {
+    width: 240;
+    height: 1;
+    background-color: rgba(255, 136, 0, 0.3);
+  }
+  .btn-back {
+    padding-top: 10;
+    padding-bottom: 10;
+    padding-left: 20;
+    padding-right: 20;
+    background-color: rgba(255, 136, 0, 0.15);
+    border-radius: 8;
+    border-color: #ff8800;
+    border-width: 1;
+    width: 220;
+    align-items: center;
+    cursor: pointer;
+    margin-top: 8;
+  }
+  .btn-text {
+    font-size: 16;
+    color: #ffffff;
+  }
+</style>
+<Panel class="root">
+  <div class="title" id="settings-title">SETTINGS</div>
+  <div class="divider"></div>
+  <div class="setting-row">
+    <div class="setting-label">DIFFICULTY</div>
+    <div class="toggle-btn" id="btn-difficulty">
+      <div class="toggle-text" id="difficulty-val">NORMAL</div>
+    </div>
+  </div>
+  <div class="setting-row">
+    <div class="setting-label">SOUND</div>
+    <div class="toggle-btn" id="btn-sound">
+      <div class="toggle-text" id="sound-val">ON</div>
+    </div>
+  </div>
+  <div class="setting-row">
+    <div class="setting-label">MUSIC</div>
+    <div class="toggle-btn" id="btn-music">
+      <div class="toggle-text" id="music-val">ON</div>
+    </div>
+  </div>
+  <div class="divider"></div>
+  <div class="btn-back" id="btn-back">
+    <div class="btn-text">← BACK</div>
+  </div>
+</Panel>

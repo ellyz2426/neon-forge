@@ -1,0 +1,56 @@
+<style>
+  .root {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24;
+    gap: 16;
+    background-color: rgba(20, 8, 0, 0.94);
+    border-radius: 16;
+    border-color: #ff8800;
+    border-width: 2;
+    width: 340;
+    height: 280;
+  }
+  .title {
+    font-size: 28;
+    color: #ff8800;
+  }
+  .subtitle {
+    font-size: 14;
+    color: #ffaa33;
+  }
+  .divider {
+    width: 200;
+    height: 1;
+    background-color: rgba(255, 136, 0, 0.3);
+  }
+  .btn {
+    padding-top: 12;
+    padding-bottom: 12;
+    padding-left: 20;
+    padding-right: 20;
+    background-color: rgba(255, 136, 0, 0.15);
+    border-radius: 8;
+    border-color: #ff8800;
+    border-width: 1;
+    width: 220;
+    align-items: center;
+    cursor: pointer;
+  }
+  .btn-text {
+    font-size: 18;
+    color: #ffffff;
+  }
+</style>
+<Panel class="root">
+  <div class="title" id="pause-title">PAUSED</div>
+  <div class="subtitle" id="pause-sub">Take a break, blacksmith</div>
+  <div class="divider"></div>
+  <div class="btn" id="btn-resume">
+    <div class="btn-text">RESUME</div>
+  </div>
+  <div class="btn" id="btn-quit">
+    <div class="btn-text">QUIT TO MENU</div>
+  </div>
+</Panel>

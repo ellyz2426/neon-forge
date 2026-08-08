@@ -1,0 +1,86 @@
+<style>
+  .root {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24;
+    gap: 16;
+    background-color: rgba(20, 8, 0, 0.94);
+    border-radius: 16;
+    border-color: #ff8800;
+    border-width: 2;
+    width: 380;
+    height: 460;
+  }
+  .title {
+    font-size: 32;
+    color: #ff8800;
+    margin-bottom: 4;
+  }
+  .subtitle {
+    font-size: 14;
+    color: #ffaa33;
+    margin-bottom: 12;
+  }
+  .btn {
+    padding-top: 12;
+    padding-bottom: 12;
+    padding-left: 20;
+    padding-right: 20;
+    background-color: rgba(255, 136, 0, 0.15);
+    border-radius: 8;
+    border-color: #ff8800;
+    border-width: 1;
+    width: 260;
+    align-items: center;
+    cursor: pointer;
+  }
+  .btn-text {
+    font-size: 18;
+    color: #ffffff;
+  }
+  .divider {
+    width: 200;
+    height: 1;
+    background-color: rgba(255, 136, 0, 0.3);
+    margin-top: 4;
+    margin-bottom: 4;
+  }
+  .rank-row {
+    flex-direction: column;
+    align-items: center;
+    gap: 2;
+    margin-bottom: 4;
+  }
+  .rank-label {
+    font-size: 11;
+    color: #ffaa33;
+  }
+  .rank-title {
+    font-size: 16;
+    color: #ffdd44;
+  }
+  .rank-progress {
+    font-size: 11;
+    color: #888888;
+  }
+</style>
+<Panel class="root">
+  <div class="title" id="title">NEON FORGE</div>
+  <div class="subtitle" id="subtitle">Blacksmith Arcade</div>
+  <div class="rank-row">
+    <div class="rank-label">RANK</div>
+    <div class="rank-title" id="rank">Apprentice</div>
+    <div class="rank-progress" id="rank-progress">0/10 items</div>
+  </div>
+  <div class="divider"></div>
+  <div class="btn" id="btn-play">
+    <div class="btn-text">⚔ START FORGING</div>
+  </div>
+  <div class="btn" id="btn-settings">
+    <div class="btn-text">⚙ SETTINGS</div>
+  </div>
+  <div class="btn" id="btn-help">
+    <div class="btn-text">? HOW TO PLAY</div>
+  </div>
+</Panel>

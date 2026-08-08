@@ -1,0 +1,27 @@
+<style>
+  .root {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24;
+    gap: 12;
+    background-color: rgba(20, 8, 0, 0.92);
+    border-radius: 16;
+    border-color: #ffaa00;
+    border-width: 3;
+    width: 400;
+    height: 200;
+  }
+  .title {
+    font-size: 36;
+    color: #ffaa00;
+  }
+  .subtitle {
+    font-size: 18;
+    color: #ffffff;
+  }
+</style>
+<Panel class="root">
+  <div class="title" id="wave-title">WAVE 1</div>
+  <div class="subtitle" id="wave-sub">3 orders to fill</div>
+</Panel>

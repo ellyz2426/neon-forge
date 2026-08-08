@@ -9,7 +9,7 @@
     border-radius: 10;
     border-color: #ff8800;
     border-width: 1;
-    width: 700;
+    width: 780;
     height: 70;
   }
   .stat-group {
@@ -40,6 +40,10 @@
   .hi-value {
     font-size: 14;
     color: #ffdd44;
+  }
+  .streak-value {
+    font-size: 16;
+    color: #ff44ff;
   }
   .diff-value {
     font-size: 14;
@@ -88,6 +92,11 @@
   <div class="stat-group">
     <div class="stat-label">LIVES</div>
     <div class="lives-value" id="lives">---</div>
+  </div>
+  <div class="divider"></div>
+  <div class="stat-group">
+    <div class="stat-label">STREAK</div>
+    <div class="streak-value" id="streak">0</div>
   </div>
   <div class="divider"></div>
   <div class="stat-group">

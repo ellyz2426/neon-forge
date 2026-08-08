@@ -39,4 +39,9 @@ export default defineAssets({
 		type: AssetType.UIKitML,
 		name: 'Wave Panel',
 	},
+	'help-panel': {
+		url: publicAssetUrl('ui/help.uikitml'),
+		type: AssetType.UIKitML,
+		name: 'Help Panel',
+	},
 });

@@ -10,7 +10,7 @@
     border-color: #ff8800;
     border-width: 2;
     width: 380;
-    height: 420;
+    height: 460;
   }
   .title {
     font-size: 32;
@@ -56,5 +56,8 @@
   </div>
   <div class="btn" id="btn-settings">
     <div class="btn-text">⚙ SETTINGS</div>
+  </div>
+  <div class="btn" id="btn-help">
+    <div class="btn-text">? HOW TO PLAY</div>
   </div>
 </Panel>

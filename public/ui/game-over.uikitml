@@ -10,7 +10,7 @@
     border-color: #ff4444;
     border-width: 2;
     width: 380;
-    height: 440;
+    height: 480;
   }
   .title {
     font-size: 30;
@@ -81,6 +81,10 @@
   <div class="stat-row">
     <div class="stat-label">BEST COMBO</div>
     <div class="stat-value" id="go-combo">x1</div>
+  </div>
+  <div class="stat-row">
+    <div class="stat-label">BEST STREAK</div>
+    <div class="stat-value" id="go-streak">0</div>
   </div>
   <div class="stat-row">
     <div class="stat-label">ITEMS CRAFTED</div>

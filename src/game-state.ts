@@ -22,6 +22,7 @@ export interface Order {
 	timeLimit: number;
 	baseScore: number;
 	isGolden: boolean;
+	isRush: boolean;
 }
 
 export const gs = {
@@ -51,6 +52,11 @@ export const gs = {
 	perfectWave: true,
 	craftedByType: [0, 0, 0, 0, 0] as number[],
 	craftedByMetal: [0, 0, 0] as number[],
+	streak: 0,
+	bestStreak: 0,
+	goldenFlashTimer: 0,
+	cameraShakeTimer: 0,
+	cameraShakeIntensity: 0,
 };
 
 // Load high score from localStorage

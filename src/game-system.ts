@@ -17,7 +17,7 @@ import {
 	RayInteractable,
 } from '@iwsdk/core';
 import { ForgeStation, BellowsInteract } from './components.js';
-import { AudioSystem } from './audio-system.js';
+import { systemRefs } from './system-refs.js';
 import {
 	gs,
 	ITEM_NAMES,
@@ -56,7 +56,6 @@ export class GameSystem extends createSystem({
 	private stationGlows: Mesh[] = [];
 	private elapsed = 0;
 	private activeStation = -1;
-	private audioSys: AudioSystem | null = null;
 	private anvilTop: Mesh | null = null;
 	private anvilBounceTimer = 0;
 	private displayWeapons: Mesh[] = [];
@@ -69,6 +68,9 @@ export class GameSystem extends createSystem({
 	private bellowsPuffGroup: Group | null = null;
 	private customerBounceTimer = 0;
 	private emberGroup: Group | null = null;
+	private dustGroup: Group | null = null;
+	private mainCamera: Group | null = null;
+	private cameraBasePos = new Vector3();
 
 	init() {
 		this.buildEnvironment();
@@ -76,11 +78,10 @@ export class GameSystem extends createSystem({
 		this.createSmokeParticles();
 		this.createSteamParticles();
 		this.createEmberParticles();
+		this.createDustMotes();
 
-		// Find AudioSystem
-		for (const sys of (this.world as any)._systems || []) {
-			if (sys instanceof AudioSystem) this.audioSys = sys;
-		}
+		// Register self for cross-system lookups
+		systemRefs.game = this;
 
 		this.queries.pressedStations.subscribe('qualify', (entity) => {
 			if (gs.phase !== 'playing') return;
@@ -93,6 +94,8 @@ export class GameSystem extends createSystem({
 			this.handleBellows();
 		});
 	}
+
+	private get audioSys() { return systemRefs.audio; }
 
 	/* ─── Environment ────────────────────────────────────────── */
 
@@ -846,12 +849,12 @@ export class GameSystem extends createSystem({
 		this.steamGroup = new Group();
 		this.steamGroup.position.set(0.9, 0.6, -2.0);
 		this.steamGroup.visible = false;
-		for (let i = 0; i < 10; i++) {
+		for (let i = 0; i < 15; i++) {
 			const steamMat = new MeshStandardMaterial({ color: 0xccccdd, transparent: true, opacity: 0 });
-			const sp = new Mesh(new SphereGeometry(0.025 + Math.random() * 0.02, 5, 4), steamMat);
-			sp.userData.vel = 0.6 + Math.random() * 0.4;
-			sp.userData.drift = (Math.random() - 0.5) * 0.3;
-			sp.userData.maxLife = 1.0 + Math.random() * 0.5;
+			const sp = new Mesh(new SphereGeometry(0.03 + Math.random() * 0.025, 5, 4), steamMat);
+			sp.userData.vel = 0.8 + Math.random() * 0.5;
+			sp.userData.drift = (Math.random() - 0.5) * 0.4;
+			sp.userData.maxLife = 1.2 + Math.random() * 0.6;
 			sp.userData.life = 0;
 			sp.visible = false;
 			this.steamGroup.add(sp);
@@ -863,11 +866,44 @@ export class GameSystem extends createSystem({
 		this.steamGroup.visible = true;
 		for (const sp of this.steamGroup.children) {
 			const m = sp as Mesh;
-			m.position.set((Math.random() - 0.5) * 0.3, 0, (Math.random() - 0.5) * 0.15);
+			m.position.set((Math.random() - 0.5) * 0.4, 0, (Math.random() - 0.5) * 0.2);
 			m.userData.life = m.userData.maxLife;
 			m.visible = true;
-			(m.material as MeshStandardMaterial).opacity = 0.6;
+			(m.material as MeshStandardMaterial).opacity = 0.7;
 		}
+	}
+
+	/* ─── Dust Motes ──────────────────────────────────────── */
+
+	private createDustMotes() {
+		this.dustGroup = new Group();
+		this.dustGroup.position.set(0, 2.5, -1.5);
+		for (let i = 0; i < 20; i++) {
+			const dustMat = new MeshStandardMaterial({
+				color: 0xffddaa, emissive: 0xffaa44, emissiveIntensity: 0.5,
+				transparent: true, opacity: 0.15 + Math.random() * 0.2,
+			});
+			const mote = new Mesh(new SphereGeometry(0.006 + Math.random() * 0.006, 4, 3), dustMat);
+			mote.position.set(
+				(Math.random() - 0.5) * 4,
+				(Math.random() - 0.5) * 3,
+				(Math.random() - 0.5) * 3,
+			);
+			mote.userData.baseX = mote.position.x;
+			mote.userData.baseY = mote.position.y;
+			mote.userData.baseZ = mote.position.z;
+			mote.userData.phaseX = Math.random() * Math.PI * 2;
+			mote.userData.phaseY = Math.random() * Math.PI * 2;
+			mote.userData.phaseZ = Math.random() * Math.PI * 2;
+			mote.userData.speedX = 0.3 + Math.random() * 0.5;
+			mote.userData.speedY = 0.2 + Math.random() * 0.3;
+			mote.userData.speedZ = 0.15 + Math.random() * 0.25;
+			mote.userData.ampX = 0.1 + Math.random() * 0.15;
+			mote.userData.ampY = 0.05 + Math.random() * 0.08;
+			mote.userData.ampZ = 0.08 + Math.random() * 0.1;
+			this.dustGroup.add(mote);
+		}
+		this.world.scene.add(this.dustGroup);
 	}
 
 	/* ─── Game Logic ─────────────────────────────────────────── */
@@ -890,6 +926,11 @@ export class GameSystem extends createSystem({
 		gs.perfectWave = true;
 		gs.craftedByType = [0, 0, 0, 0, 0];
 		gs.craftedByMetal = [0, 0, 0];
+		gs.streak = 0;
+		gs.bestStreak = 0;
+		gs.goldenFlashTimer = 0;
+		gs.cameraShakeTimer = 0;
+		gs.cameraShakeIntensity = 0;
 		gs.dirty = true;
 		// Reset weapon display
 		for (const w of this.displayWeapons) w.visible = false;
@@ -943,9 +984,17 @@ export class GameSystem extends createSystem({
 		// Golden order — 15% chance after wave 2
 		const isGolden = w >= 3 && Math.random() < 0.15;
 
+		// Rush order — 12% chance after wave 1, short timer + 1.5x score
+		const isRush = !isGolden && w >= 2 && Math.random() < 0.12;
+
+		const rushTimeMult = isRush ? 0.6 : 1;
+
 		gs.currentOrder = {
-			itemType, metalType, hammerTarget, timeLimit, baseScore,
+			itemType, metalType, hammerTarget,
+			timeLimit: timeLimit * rushTimeMult,
+			baseScore: isRush ? Math.floor(baseScore * 1.5) : baseScore,
 			isGolden,
+			isRush,
 		};
 		gs.orderTimer = timeLimit;
 		gs.workStep = 'idle';
@@ -993,6 +1042,8 @@ export class GameSystem extends createSystem({
 					this.triggerSparks();
 					this.audioSys?.playHammer();
 					this.anvilBounceTimer = 0.15;
+					gs.cameraShakeTimer = 0.12;
+					gs.cameraShakeIntensity = 0.008;
 					if (gs.hammerCount >= o.hammerTarget) {
 						gs.workStep = 'forged';
 						this.moveWorkpiece(3);
@@ -1030,9 +1081,13 @@ export class GameSystem extends createSystem({
 		const timeBonus = Math.max(0, (gs.orderTimer / o.timeLimit) * 50) | 0;
 		gs.combo++;
 		if (gs.combo > gs.maxCombo) gs.maxCombo = gs.combo;
+		gs.streak++;
+		if (gs.streak > gs.bestStreak) gs.bestStreak = gs.streak;
+		// Streak bonus: +50 per streak level after 3
+		const streakBonus = gs.streak >= 3 ? (gs.streak - 2) * 50 : 0;
 		const comboMult = 1 + (gs.combo - 1) * 0.25;
 		const goldenMult = o.isGolden ? 2.5 : 1;
-		const points = ((o.baseScore + timeBonus) * comboMult * goldenMult) | 0;
+		const points = ((o.baseScore + timeBonus + streakBonus) * comboMult * goldenMult) | 0;
 		gs.score += points;
 		gs.ordersThisWave++;
 		gs.totalOrders++;
@@ -1040,6 +1095,11 @@ export class GameSystem extends createSystem({
 		gs.craftedByMetal[o.metalType]++;
 		gs.workStep = 'idle';
 		gs.deliveryFlashTimer = 0.8;
+
+		// Golden order completion flash
+		if (o.isGolden) {
+			gs.goldenFlashTimer = 1.2;
+		}
 
 		// Show on weapon display
 		const displayIdx = (gs.totalOrders - 1) % this.displayWeapons.length;
@@ -1063,6 +1123,7 @@ export class GameSystem extends createSystem({
 	private failOrder() {
 		gs.lives--;
 		gs.combo = 0;
+		gs.streak = 0;
 		gs.perfectWave = false;
 		gs.workStep = 'idle';
 		this.workpiece.visible = false;
@@ -1281,7 +1342,7 @@ export class GameSystem extends createSystem({
 			}
 		}
 
-		// Heating logic
+		// Heating logic with color transitions: cold → orange → yellow → white-hot
 		if (gs.workStep === 'heating') {
 			const heatRate = this.bellowsBoost > 0 ? 0.3 : 0.12;
 			gs.heatLevel += delta * heatRate;
@@ -1291,8 +1352,25 @@ export class GameSystem extends createSystem({
 				this.moveWorkpiece(2);
 				this.updateActiveStation();
 			}
-			this.workpieceMat.emissive.setHex(0xff4400);
-			this.workpieceMat.emissiveIntensity = gs.heatLevel * 1.5;
+			// Color transition: cold metal → orange → yellow-orange → white-hot
+			const h = gs.heatLevel;
+			if (h < 0.3) {
+				// Cold to dim orange
+				this.workpieceMat.emissive.setHex(0xff2200);
+				this.workpieceMat.emissiveIntensity = h * 2.0;
+			} else if (h < 0.6) {
+				// Orange to bright orange-yellow
+				this.workpieceMat.emissive.setHex(0xff6600);
+				this.workpieceMat.emissiveIntensity = 0.6 + (h - 0.3) * 3.0;
+			} else if (h < 0.85) {
+				// Yellow-orange to bright yellow
+				this.workpieceMat.emissive.setHex(0xffaa22);
+				this.workpieceMat.emissiveIntensity = 1.5 + (h - 0.6) * 2.0;
+			} else {
+				// White-hot glow
+				this.workpieceMat.emissive.setHex(0xffddaa);
+				this.workpieceMat.emissiveIntensity = 2.0 + (h - 0.85) * 4.0;
+			}
 			gs.dirty = true;
 		}
 
@@ -1420,6 +1498,50 @@ export class GameSystem extends createSystem({
 			this.anvilBounceTimer -= delta;
 			const bounce = Math.sin(this.anvilBounceTimer * 40) * this.anvilBounceTimer * 0.15;
 			this.anvilTop.position.y = 0.62 + bounce;
+		}
+
+		// Camera shake on anvil hits
+		if (gs.cameraShakeTimer > 0) {
+			gs.cameraShakeTimer -= delta;
+			const shakeX = (Math.random() - 0.5) * gs.cameraShakeIntensity * 2;
+			const shakeY = (Math.random() - 0.5) * gs.cameraShakeIntensity * 2;
+			const cam = this.world.scene.getObjectByProperty('type', 'PerspectiveCamera');
+			if (cam) {
+				if (!this.mainCamera) {
+					this.mainCamera = cam as Group;
+					this.cameraBasePos.copy(cam.position);
+				}
+				cam.position.x = this.cameraBasePos.x + shakeX * (gs.cameraShakeTimer / 0.12);
+				cam.position.y = this.cameraBasePos.y + shakeY * (gs.cameraShakeTimer / 0.12);
+			}
+		} else if (this.mainCamera) {
+			this.mainCamera.position.copy(this.cameraBasePos);
+		}
+
+		// Golden order completion screen flash
+		if (gs.goldenFlashTimer > 0) {
+			gs.goldenFlashTimer -= delta;
+			const flash = Math.max(0, gs.goldenFlashTimer / 1.2);
+			if (this.ambientFill) {
+				const goldenPulse = flash > 0.7 ? (flash - 0.7) / 0.3 : 0;
+				if (goldenPulse > 0) {
+					this.ambientFill.color.setHex(0xffdd00);
+					this.ambientFill.intensity = 0.6 + goldenPulse * 4.0;
+				}
+			}
+		}
+
+		// Dust motes floating in forge light beams
+		if (this.dustGroup) {
+			for (const sp of this.dustGroup.children) {
+				const m = sp as Mesh;
+				m.position.x = m.userData.baseX + Math.sin(time * m.userData.speedX + m.userData.phaseX) * m.userData.ampX;
+				m.position.y = m.userData.baseY + Math.sin(time * m.userData.speedY + m.userData.phaseY) * m.userData.ampY;
+				m.position.z = m.userData.baseZ + Math.cos(time * m.userData.speedZ + m.userData.phaseZ) * m.userData.ampZ;
+				const mat = m.material as MeshStandardMaterial;
+				// Subtle shimmer as motes catch the light
+				mat.opacity = 0.12 + Math.sin(time * 2 + m.userData.phaseX) * 0.08;
+			}
 		}
 
 		gs.dirty = true;

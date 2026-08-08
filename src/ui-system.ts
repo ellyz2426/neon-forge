@@ -5,8 +5,7 @@ import {
 	METAL_NAMES,
 	type GamePhase,
 } from './game-state.js';
-import { GameSystem } from './game-system.js';
-import { AudioSystem } from './audio-system.js';
+import { systemRefs } from './system-refs.js';
 
 export class UISystem extends createSystem({}) {
 	private menuPanel: UIKitMLAsset | undefined;
@@ -16,12 +15,11 @@ export class UISystem extends createSystem({}) {
 	private settingsPanel: UIKitMLAsset | undefined;
 	private pausePanel: UIKitMLAsset | undefined;
 	private wavePanel: UIKitMLAsset | undefined;
+	private helpPanel: UIKitMLAsset | undefined;
 	private lastPhase: GamePhase = 'menu';
 	private wired = false;
 	private wireAttempts = 0;
 	private wireDelay = 0;
-	private gameSys: GameSystem | null = null;
-	private audioSys: AudioSystem | null = null;
 
 	init() {
 		this.wireDelay = 0.5;
@@ -36,40 +34,42 @@ export class UISystem extends createSystem({}) {
 			this.settingsPanel = this.world.getSceneObject<UIKitMLAsset>('settings-panel');
 			this.pausePanel = this.world.getSceneObject<UIKitMLAsset>('pause-panel');
 			this.wavePanel = this.world.getSceneObject<UIKitMLAsset>('wave-panel');
+			this.helpPanel = this.world.getSceneObject<UIKitMLAsset>('help-panel');
 		} catch {
 			return;
 		}
 
-		// Find sibling systems
-		for (const sys of (this.world as any)._systems || []) {
-			if (sys instanceof GameSystem) this.gameSys = sys;
-			if (sys instanceof AudioSystem) this.audioSys = sys;
-		}
+		const gameSys = systemRefs.game;
+		const audioSys = systemRefs.audio;
 
 		// Menu buttons
 		this.menuPanel?.getElementById('btn-play')?.addEventListener('click', () => {
-			this.audioSys?.playSelect();
-			this.gameSys?.startGame();
+			audioSys?.playSelect();
+			gameSys?.startGame();
 		});
 		this.menuPanel?.getElementById('btn-settings')?.addEventListener('click', () => {
-			this.audioSys?.playSelect();
+			audioSys?.playSelect();
 			this.showSettings();
+		});
+		this.menuPanel?.getElementById('btn-help')?.addEventListener('click', () => {
+			audioSys?.playSelect();
+			this.showHelp();
 		});
 
 		// Game over buttons
 		this.gameOverPanel?.getElementById('btn-restart')?.addEventListener('click', () => {
-			this.audioSys?.playSelect();
-			this.gameSys?.startGame();
+			audioSys?.playSelect();
+			gameSys?.startGame();
 		});
 		this.gameOverPanel?.getElementById('btn-menu')?.addEventListener('click', () => {
-			this.audioSys?.playSelect();
+			audioSys?.playSelect();
 			gs.phase = 'menu';
 			gs.dirty = true;
 		});
 
 		// Settings buttons
 		this.settingsPanel?.getElementById('btn-difficulty')?.addEventListener('click', () => {
-			this.audioSys?.playSelect();
+			audioSys?.playSelect();
 			const modes = ['easy', 'normal', 'hard'] as const;
 			const idx = modes.indexOf(gs.difficulty);
 			gs.difficulty = modes[(idx + 1) % 3];
@@ -84,25 +84,31 @@ export class UISystem extends createSystem({}) {
 			this.settingsPanel?.getElementById('music-val')?.setProperties({ text: gs.musicEnabled ? 'ON' : 'OFF' });
 		});
 		this.settingsPanel?.getElementById('btn-back')?.addEventListener('click', () => {
-			this.audioSys?.playSelect();
+			audioSys?.playSelect();
 			this.hideSettings();
+		});
+
+		// Help panel back button
+		this.helpPanel?.getElementById('btn-help-back')?.addEventListener('click', () => {
+			audioSys?.playSelect();
+			this.hideHelp();
 		});
 
 		// Pause panel buttons
 		this.pausePanel?.getElementById('btn-resume')?.addEventListener('click', () => {
-			this.audioSys?.playSelect();
-			this.gameSys?.resumeGame();
+			audioSys?.playSelect();
+			gameSys?.resumeGame();
 		});
 		this.pausePanel?.getElementById('btn-quit')?.addEventListener('click', () => {
-			this.audioSys?.playSelect();
+			audioSys?.playSelect();
 			gs.phase = 'menu';
 			gs.dirty = true;
 		});
 
 		// HUD pause button
 		this.hudPanel?.getElementById('btn-pause')?.addEventListener('click', () => {
-			this.audioSys?.playSelect();
-			this.gameSys?.pauseGame();
+			audioSys?.playSelect();
+			gameSys?.pauseGame();
 		});
 
 		this.wired = true;
@@ -110,6 +116,7 @@ export class UISystem extends createSystem({}) {
 	}
 
 	private settingsShown = false;
+	private helpShown = false;
 
 	private showSettings() {
 		this.settingsShown = true;
@@ -123,8 +130,21 @@ export class UISystem extends createSystem({}) {
 		if (this.menuPanel) this.menuPanel.visible = true;
 	}
 
+	private showHelp() {
+		this.helpShown = true;
+		if (this.menuPanel) this.menuPanel.visible = false;
+		if (this.helpPanel) this.helpPanel.visible = true;
+	}
+
+	private hideHelp() {
+		this.helpShown = false;
+		if (this.helpPanel) this.helpPanel.visible = false;
+		if (this.menuPanel) this.menuPanel.visible = true;
+	}
+
 	private showPhase(phase: GamePhase) {
 		this.settingsShown = false;
+		this.helpShown = false;
 		const m = phase === 'menu';
 		const p = phase === 'playing' || phase === 'wave_intro' || phase === 'wave_complete';
 		const g = phase === 'game_over';
@@ -135,6 +155,7 @@ export class UISystem extends createSystem({}) {
 		if (this.orderPanel) this.orderPanel.visible = phase === 'playing';
 		if (this.gameOverPanel) this.gameOverPanel.visible = g;
 		if (this.settingsPanel) this.settingsPanel.visible = false;
+		if (this.helpPanel) this.helpPanel.visible = false;
 		if (this.pausePanel) this.pausePanel.visible = pa;
 		if (this.wavePanel) this.wavePanel.visible = w;
 	}
@@ -153,6 +174,9 @@ export class UISystem extends createSystem({}) {
 		this.hudPanel?.getElementById('difficulty')?.setProperties({
 			text: gs.difficulty.toUpperCase(),
 		});
+		// Streak indicator
+		const streakText = gs.streak >= 3 ? `${gs.streak} 🔥` : String(gs.streak);
+		this.hudPanel?.getElementById('streak')?.setProperties({ text: streakText });
 	}
 
 	private updateOrder() {
@@ -181,6 +205,10 @@ export class UISystem extends createSystem({}) {
 
 		const timer = Math.max(0, gs.orderTimer) | 0;
 		this.orderPanel?.getElementById('order-timer')?.setProperties({ text: `TIME: ${timer}s` });
+		// Rush order indicator
+		this.orderPanel?.getElementById('rush-label')?.setProperties({
+			text: o.isRush ? '⚡ RUSH ORDER — 1.5x SCORE!' : '',
+		});
 	}
 
 	private updateGameOver() {
@@ -188,6 +216,7 @@ export class UISystem extends createSystem({}) {
 		this.gameOverPanel?.getElementById('go-waves')?.setProperties({ text: String(gs.wave) });
 		this.gameOverPanel?.getElementById('go-orders')?.setProperties({ text: String(gs.totalOrders) });
 		this.gameOverPanel?.getElementById('go-combo')?.setProperties({ text: `x${gs.maxCombo + 1}` });
+		this.gameOverPanel?.getElementById('go-streak')?.setProperties({ text: String(gs.bestStreak) });
 		const isNew = gs.score >= gs.highScore && gs.score > 0;
 		this.gameOverPanel?.getElementById('go-highscore')?.setProperties({
 			text: isNew ? `NEW! ${gs.score}` : String(gs.highScore),
@@ -231,7 +260,7 @@ export class UISystem extends createSystem({}) {
 			this.showPhase(gs.phase);
 			if (gs.phase === 'game_over') {
 				this.updateGameOver();
-				this.audioSys?.playFail();
+				systemRefs.audio?.playFail();
 			}
 			if (gs.phase === 'wave_intro' || gs.phase === 'wave_complete') {
 				this.updateWavePanel();

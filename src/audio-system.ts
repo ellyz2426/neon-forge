@@ -1,5 +1,6 @@
 import { createSystem } from '@iwsdk/core';
 import { gs } from './game-state.js';
+import { systemRefs } from './system-refs.js';
 
 export class AudioSystem extends createSystem({}) {
 	private ctx: AudioContext | null = null;
@@ -18,6 +19,8 @@ export class AudioSystem extends createSystem({}) {
 		} catch {
 			/* audio unavailable */
 		}
+		// Register self for cross-system lookups
+		systemRefs.audio = this;
 	}
 
 	public startDrone() {

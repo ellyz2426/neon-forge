@@ -13,7 +13,7 @@ export const ITEM_SHAPES: [number, number, number][] = [
 ];
 
 export type GamePhase = 'menu' | 'playing' | 'wave_intro' | 'wave_complete' | 'game_over' | 'paused';
-export type WorkStep = 'idle' | 'heating' | 'hot' | 'hammering' | 'forged' | 'quenching' | 'ready';
+export type WorkStep = 'idle' | 'heating' | 'hot' | 'hammering' | 'forged' | 'quenching' | 'ready' | 'cooled';
 
 export interface Order {
 	itemType: number;
@@ -60,6 +60,28 @@ export const gs = {
 	lifetimeCrafted: 0,
 	lifetimeGames: 0,
 	bestWave: 0,
+
+	// Round 8 — heat decay
+	heatDecayActive: false,
+
+	// Round 8 — rhythm hammer
+	rhythmStreak: 0,
+	lastHammerTime: 0,
+	prevHammerInterval: 0,
+	rhythmGlowTimer: 0,
+
+	// Round 8 — weather
+	weatherActive: false,
+	lightningTimer: 0,
+	lightningFlashTimer: 0,
+
+	// Round 8 — order queue
+	orderQueue: [] as Order[],
+
+	// Round 8 — delivery flourish
+	flourishTimer: 0,
+	flourishItemType: 0,
+	flourishMetalType: 0,
 };
 
 // Load high score from localStorage

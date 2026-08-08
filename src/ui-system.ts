@@ -204,7 +204,7 @@ export class UISystem extends createSystem({}) {
 		});
 
 		const steps: [string, string][] = [
-			['step-heat', gs.workStep === 'heating' ? `${(gs.heatLevel * 100) | 0}%` : gs.heatLevel >= 1 ? 'DONE' : '---'],
+			['step-heat', gs.workStep === 'heating' || gs.workStep === 'cooled' ? `${(gs.heatLevel * 100) | 0}%` : gs.heatLevel >= 1 ? 'DONE' : '---'],
 			['step-hammer', gs.workStep === 'hammering' || gs.workStep === 'hot' ? `${gs.hammerCount}/${o.hammerTarget}` : gs.hammerCount >= o.hammerTarget ? 'DONE' : '---'],
 			['step-quench', gs.workStep === 'quenching' ? 'COOLING' : gs.workStep === 'ready' ? 'DONE' : '---'],
 			['step-deliver', gs.workStep === 'ready' ? 'READY!' : '---'],
@@ -215,10 +215,34 @@ export class UISystem extends createSystem({}) {
 
 		const timer = Math.max(0, gs.orderTimer) | 0;
 		this.orderPanel?.getElementById('order-timer')?.setProperties({ text: `TIME: ${timer}s` });
+
+		// Heat decay warning
+		const heatWarn = gs.workStep === 'cooled'
+			? '⚠ COOLED! Re-heat at forge!'
+			: gs.heatDecayActive && gs.heatLevel < 0.5
+			? `⚠ Cooling... ${(gs.heatLevel * 100) | 0}%`
+			: '';
+		this.orderPanel?.getElementById('heat-warning')?.setProperties({ text: heatWarn });
+
+		// Rhythm bonus indicator
+		const rhythmText = gs.rhythmStreak >= 2
+			? `♫ RHYTHM x${gs.rhythmStreak} — 2x HAMMER!`
+			: '';
+		this.orderPanel?.getElementById('rhythm-label')?.setProperties({ text: rhythmText });
+
 		// Rush order indicator
 		this.orderPanel?.getElementById('rush-label')?.setProperties({
 			text: o.isRush ? '⚡ RUSH ORDER — 1.5x SCORE!' : '',
 		});
+
+		// Order queue preview
+		for (let qi = 0; qi < 2; qi++) {
+			const qOrder = gs.orderQueue[qi];
+			const qText = qOrder
+				? `${qOrder.isGolden ? '★ ' : qOrder.isRush ? '⚡ ' : ''}${METAL_NAMES[qOrder.metalType]} ${ITEM_NAMES[qOrder.itemType]}`
+				: '---';
+			this.orderPanel?.getElementById(`queue-${qi + 1}`)?.setProperties({ text: qText });
+		}
 	}
 
 	private updateGameOver() {

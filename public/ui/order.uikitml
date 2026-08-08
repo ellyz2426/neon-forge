@@ -9,7 +9,7 @@
     border-color: #ff8800;
     border-width: 1;
     width: 320;
-    height: 340;
+    height: 420;
   }
   .header {
     font-size: 16;
@@ -56,6 +56,46 @@
     color: #ff4444;
     margin-top: 4;
   }
+  .heat-warning {
+    font-size: 12;
+    color: #ff6644;
+  }
+  .rhythm-label {
+    font-size: 12;
+    color: #44ddff;
+  }
+  .queue-section {
+    flex-direction: column;
+    align-items: center;
+    gap: 4;
+    margin-top: 4;
+    width: 280;
+  }
+  .queue-header {
+    font-size: 11;
+    color: #888888;
+  }
+  .queue-row {
+    flex-direction: row;
+    align-items: center;
+    gap: 6;
+    width: 260;
+    padding-top: 3;
+    padding-bottom: 3;
+    padding-left: 8;
+    padding-right: 8;
+    background-color: rgba(255, 136, 0, 0.06);
+    border-radius: 4;
+  }
+  .queue-icon {
+    font-size: 11;
+    color: #ffaa33;
+    width: 20;
+  }
+  .queue-name {
+    font-size: 12;
+    color: #aaaaaa;
+  }
 </style>
 <Panel class="root">
   <div class="header" id="order-header">CURRENT ORDER</div>
@@ -83,5 +123,19 @@
     <div class="step-status" id="step-deliver">---</div>
   </div>
   <div class="timer-label" id="order-timer">TIME: 60s</div>
+  <div class="heat-warning" id="heat-warning"></div>
+  <div class="rhythm-label" id="rhythm-label"></div>
   <div class="rush-label" id="rush-label"></div>
+  <div class="divider"></div>
+  <div class="queue-section">
+    <div class="queue-header">UP NEXT</div>
+    <div class="queue-row">
+      <div class="queue-icon">1.</div>
+      <div class="queue-name" id="queue-1">---</div>
+    </div>
+    <div class="queue-row">
+      <div class="queue-icon">2.</div>
+      <div class="queue-name" id="queue-2">---</div>
+    </div>
+  </div>
 </Panel>

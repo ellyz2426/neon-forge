@@ -188,6 +188,68 @@ export class AudioSystem extends createSystem({}) {
 		osc.stop(t + 0.1);
 	}
 
+	public playThunder() {
+		if (!this.ctx || !this.masterGain || !gs.soundEnabled) return;
+		this.resumeCtx();
+		const t = this.ctx.currentTime;
+		const dur = 1.2;
+		const buf = this.ctx.createBuffer(1, (this.ctx.sampleRate * dur) | 0, this.ctx.sampleRate);
+		const data = buf.getChannelData(0);
+		for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1);
+		const src = this.ctx.createBufferSource();
+		src.buffer = buf;
+		const filt = this.ctx.createBiquadFilter();
+		filt.type = 'lowpass';
+		filt.frequency.setValueAtTime(300, t);
+		filt.frequency.exponentialRampToValueAtTime(80, t + dur);
+		filt.Q.value = 0.5;
+		const env = this.ctx.createGain();
+		env.gain.setValueAtTime(0, t);
+		env.gain.linearRampToValueAtTime(0.25, t + 0.05);
+		env.gain.exponentialRampToValueAtTime(0.001, t + dur);
+		src.connect(filt).connect(env).connect(this.masterGain);
+		src.start(t);
+	}
+
+	public playWindGust() {
+		if (!this.ctx || !this.masterGain || !gs.soundEnabled) return;
+		this.resumeCtx();
+		const t = this.ctx.currentTime;
+		const dur = 2.0;
+		const buf = this.ctx.createBuffer(1, (this.ctx.sampleRate * dur) | 0, this.ctx.sampleRate);
+		const data = buf.getChannelData(0);
+		for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1);
+		const src = this.ctx.createBufferSource();
+		src.buffer = buf;
+		const filt = this.ctx.createBiquadFilter();
+		filt.type = 'bandpass';
+		filt.frequency.setValueAtTime(400, t);
+		filt.frequency.linearRampToValueAtTime(200, t + dur);
+		filt.Q.value = 0.8;
+		const env = this.ctx.createGain();
+		env.gain.setValueAtTime(0, t);
+		env.gain.linearRampToValueAtTime(0.06, t + 0.3);
+		env.gain.linearRampToValueAtTime(0.08, t + dur * 0.5);
+		env.gain.exponentialRampToValueAtTime(0.001, t + dur);
+		src.connect(filt).connect(env).connect(this.masterGain);
+		src.start(t);
+	}
+
+	public playRhythmBonusTick() {
+		if (!this.ctx || !this.masterGain || !gs.soundEnabled) return;
+		this.resumeCtx();
+		const t = this.ctx.currentTime;
+		const osc = this.ctx.createOscillator();
+		const env = this.ctx.createGain();
+		osc.type = 'sine';
+		osc.frequency.value = 660 + gs.rhythmStreak * 60;
+		env.gain.setValueAtTime(0.15, t);
+		env.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+		osc.connect(env).connect(this.masterGain);
+		osc.start(t);
+		osc.stop(t + 0.08);
+	}
+
 	public playBellows() {
 		if (!this.ctx || !this.masterGain || !gs.soundEnabled) return;
 		this.resumeCtx();

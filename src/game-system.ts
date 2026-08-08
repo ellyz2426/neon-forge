@@ -42,6 +42,13 @@ const STATION_LABELS = ['RACK', 'FORGE', 'ANVIL', 'TROUGH', 'DELIVER'];
 
 const DIFF_MULT: Record<string, number> = { easy: 1.3, normal: 1.0, hard: 0.7 };
 
+// Heat decay rate per second when away from forge
+const HEAT_DECAY_RATE = 0.08;
+// Minimum heat threshold — below this, player must re-heat
+const HEAT_MIN_THRESHOLD = 0.3;
+// Rhythm tolerance in seconds
+const RHYTHM_TOLERANCE = 0.2;
+
 export class GameSystem extends createSystem({
 	pressedStations: { required: [ForgeStation, Pressed] },
 	pressedBellows: { required: [BellowsInteract, Pressed] },
@@ -77,6 +84,16 @@ export class GameSystem extends createSystem({
 	private chimneySparkGroup: Group | null = null;
 	private customerVariant = 0;
 
+	// Round 8 additions
+	private anvilGlowMat: MeshStandardMaterial | null = null;
+	private rainGroup: Group | null = null;
+	private weatherWindTimer = 0;
+	private forgeShadowLight: PointLight | null = null;
+	private waterSurface: Mesh | null = null;
+	private waterMat: MeshStandardMaterial | null = null;
+	private flourishGroup: Group | null = null;
+	private flourishMat: MeshStandardMaterial | null = null;
+
 	init() {
 		this.buildEnvironment();
 		this.createWorkpiece();
@@ -86,6 +103,8 @@ export class GameSystem extends createSystem({
 		this.createDustMotes();
 		this.createCeilingGlow();
 		this.createChimneySparks();
+		this.createRainParticles();
+		this.createFlourishWorkpiece();
 
 		// Register self for cross-system lookups
 		systemRefs.game = this;
@@ -210,6 +229,11 @@ export class GameSystem extends createSystem({
 		this.fireLightAlt = new PointLight(0xff4400, 1.5, 6);
 		this.fireLightAlt.position.set(-0.9, 0.8, -1.7);
 		sc.add(this.fireLightAlt);
+
+		// Dynamic shadow-casting light from forge
+		this.forgeShadowLight = new PointLight(0xff4400, 1.8, 10);
+		this.forgeShadowLight.position.set(-0.9, 1.0, -1.5);
+		sc.add(this.forgeShadowLight);
 
 		// Ambient fill
 		this.ambientFill = new PointLight(0x332211, 0.6, 12);
@@ -692,6 +716,15 @@ export class GameSystem extends createSystem({
 				horn.rotation.z = Math.PI / 2;
 				horn.position.set(0.35, 0.62, 0);
 				g.add(horn);
+				// Rhythm glow ring on anvil — pulses when rhythm bonus is active
+				this.anvilGlowMat = new MeshStandardMaterial({
+					color: 0x44ddff, emissive: 0x44ddff, emissiveIntensity: 2.0,
+					transparent: true, opacity: 0,
+				});
+				const rhythmGlow = new Mesh(new TorusGeometry(0.3, 0.012, 8, 16), this.anvilGlowMat);
+				rhythmGlow.rotation.x = Math.PI / 2;
+				rhythmGlow.position.y = 0.7;
+				g.add(rhythmGlow);
 				break;
 			}
 			case 3: {
@@ -699,14 +732,14 @@ export class GameSystem extends createSystem({
 				const basin = new Mesh(new BoxGeometry(0.8, 0.45, 0.4), troughMat);
 				basin.position.y = 0.35;
 				g.add(basin);
-				const waterMat = new MeshStandardMaterial({
+				this.waterMat = new MeshStandardMaterial({
 					color: 0x1144aa, emissive: 0x0033ff, emissiveIntensity: 0.25,
 					transparent: true, opacity: 0.7,
 				});
-				const water = new Mesh(new PlaneGeometry(0.65, 0.3), waterMat);
-				water.rotation.x = -Math.PI / 2;
-				water.position.y = 0.58;
-				g.add(water);
+				this.waterSurface = new Mesh(new PlaneGeometry(0.65, 0.3, 6, 6), this.waterMat);
+				this.waterSurface.rotation.x = -Math.PI / 2;
+				this.waterSurface.position.y = 0.58;
+				g.add(this.waterSurface);
 				break;
 			}
 			case 4: {
@@ -1039,6 +1072,136 @@ export class GameSystem extends createSystem({
 		}
 	}
 
+	/* ─── Rain Particles (Window) ──────────────────────────── */
+
+	private createRainParticles() {
+		this.rainGroup = new Group();
+		// Position rain behind the window glass area
+		this.rainGroup.position.set(-2.2, 2.8, -3.87);
+		this.rainGroup.visible = false;
+		for (let i = 0; i < 20; i++) {
+			const rainMat = new MeshStandardMaterial({
+				color: 0x6688cc, emissive: 0x4466aa, emissiveIntensity: 0.5,
+				transparent: true, opacity: 0,
+			});
+			// Thin vertical line = rain streak
+			const drop = new Mesh(new BoxGeometry(0.008, 0.06 + Math.random() * 0.04, 0.002), rainMat);
+			drop.position.set(
+				(Math.random() - 0.5) * 1.0,
+				(Math.random() - 0.5) * 0.7,
+				0,
+			);
+			drop.userData.speed = 1.5 + Math.random() * 1.0;
+			drop.userData.drift = (Math.random() - 0.5) * 0.2;
+			drop.userData.life = Math.random();
+			drop.visible = false;
+			this.rainGroup.add(drop);
+		}
+		this.world.scene.add(this.rainGroup);
+	}
+
+	/* ─── Delivery Flourish Workpiece ──────────────────────── */
+
+	private createFlourishWorkpiece() {
+		this.flourishMat = new MeshStandardMaterial({
+			color: 0xffffff, emissive: 0xffdd88, emissiveIntensity: 1.5,
+			metalness: 0.7, roughness: 0.3,
+			transparent: true, opacity: 0,
+		});
+		this.flourishGroup = new Group();
+		this.flourishGroup.visible = false;
+		this.flourishGroup.position.set(2.2, 1.0, -2.2);
+		// Default shape — gets rebuilt per delivery
+		const shape = new Mesh(new BoxGeometry(0.06, 0.35, 0.04), this.flourishMat);
+		this.flourishGroup.add(shape);
+		this.world.scene.add(this.flourishGroup);
+	}
+
+	private startFlourishAnimation(itemType: number, metalType: number) {
+		// Clear old shape
+		while (this.flourishGroup!.children.length > 0) {
+			const child = this.flourishGroup!.children[0];
+			if (child instanceof Mesh) child.geometry.dispose();
+			this.flourishGroup!.remove(child);
+		}
+		// Create a copy of the completed weapon shape
+		const mat = this.flourishMat!;
+		mat.color.setHex(METAL_COLORS[metalType]);
+		mat.emissive.setHex(METAL_EMISSIVE[metalType]);
+		mat.emissiveIntensity = 1.5;
+		mat.opacity = 1.0;
+		switch (itemType) {
+			case 0: {
+				const blade = new Mesh(new BoxGeometry(0.06, 0.35, 0.04), mat);
+				this.flourishGroup!.add(blade);
+				break;
+			}
+			case 1: {
+				const handle = new Mesh(new CylinderGeometry(0.02, 0.02, 0.28, 6), mat);
+				this.flourishGroup!.add(handle);
+				const head = new Mesh(new BoxGeometry(0.14, 0.1, 0.03), mat);
+				head.position.y = 0.12;
+				this.flourishGroup!.add(head);
+				break;
+			}
+			case 2: {
+				const disc = new Mesh(new CylinderGeometry(0.12, 0.12, 0.03, 12), mat);
+				disc.rotation.x = Math.PI / 2;
+				this.flourishGroup!.add(disc);
+				break;
+			}
+			case 3: {
+				const cone = new Mesh(new ConeGeometry(0.035, 0.2, 6), mat);
+				this.flourishGroup!.add(cone);
+				break;
+			}
+			case 4: {
+				const hemi = new Mesh(
+					new SphereGeometry(0.09, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+					mat,
+				);
+				hemi.rotation.x = Math.PI;
+				this.flourishGroup!.add(hemi);
+				break;
+			}
+		}
+		// Position at delivery station
+		this.flourishGroup!.position.set(2.2, 1.0, -2.2);
+		this.flourishGroup!.rotation.set(0, 0, 0);
+		this.flourishGroup!.visible = true;
+		gs.flourishTimer = 1.5;
+		gs.flourishItemType = itemType;
+		gs.flourishMetalType = metalType;
+	}
+
+	/* ─── Order Queue Generation ──────────────────────────── */
+
+	private generateOrder(): Order {
+		const w = gs.wave;
+		const metalMax = Math.min(w, 3);
+		const metalType = Math.floor(Math.random() * metalMax);
+		const itemType = Math.floor(Math.random() * ITEM_NAMES.length);
+		const hammerTarget = 3 + Math.floor(w * 0.8) + metalType * 2;
+		const timeLimit = Math.max(25, 65 - w * 3) * DIFF_MULT[gs.difficulty];
+		const baseScore = (50 + metalType * 30 + w * 10) | 0;
+		const isGolden = w >= 3 && Math.random() < 0.15;
+		const isRush = !isGolden && w >= 2 && Math.random() < 0.12;
+		const rushTimeMult = isRush ? 0.6 : 1;
+		return {
+			itemType, metalType, hammerTarget,
+			timeLimit: timeLimit * rushTimeMult,
+			baseScore: isRush ? Math.floor(baseScore * 1.5) : baseScore,
+			isGolden, isRush,
+		};
+	}
+
+	private fillOrderQueue() {
+		// Keep queue at 2 upcoming orders
+		while (gs.orderQueue.length < 2) {
+			gs.orderQueue.push(this.generateOrder());
+		}
+	}
+
 	/* ─── Game Logic ─────────────────────────────────────────── */
 
 	public startGame() {
@@ -1064,9 +1227,23 @@ export class GameSystem extends createSystem({
 		gs.goldenFlashTimer = 0;
 		gs.cameraShakeTimer = 0;
 		gs.cameraShakeIntensity = 0;
+		// Round 8 resets
+		gs.heatDecayActive = false;
+		gs.rhythmStreak = 0;
+		gs.lastHammerTime = 0;
+		gs.prevHammerInterval = 0;
+		gs.rhythmGlowTimer = 0;
+		gs.weatherActive = Math.random() < 0.4; // 40% chance of weather per game
+		gs.lightningTimer = 8 + Math.random() * 15;
+		gs.lightningFlashTimer = 0;
+		gs.orderQueue = [];
+		gs.flourishTimer = 0;
+		if (this.rainGroup) this.rainGroup.visible = gs.weatherActive;
 		gs.dirty = true;
 		// Reset weapon display
 		for (const w of this.displayWeapons) w.visible = false;
+		if (this.flourishGroup) this.flourishGroup.visible = false;
+		this.fillOrderQueue();
 		this.nextOrder();
 	}
 
@@ -1077,6 +1254,10 @@ export class GameSystem extends createSystem({
 		this.workpiece.visible = false;
 		this.sparkGroup.visible = false;
 		if (this.goldenGlow) this.goldenGlow.visible = false;
+		if (this.flourishGroup) this.flourishGroup.visible = false;
+		if (this.rainGroup) this.rainGroup.visible = false;
+		gs.weatherActive = false;
+		gs.flourishTimer = 0;
 		saveHighScore();
 		saveLifetimeStats();
 		gs.dirty = true;
@@ -1107,33 +1288,20 @@ export class GameSystem extends createSystem({
 			return;
 		}
 
-		const w = gs.wave;
-		const metalMax = Math.min(w, 3);
-		const metalType = Math.floor(Math.random() * metalMax);
-		const itemType = Math.floor(Math.random() * ITEM_NAMES.length);
-		const hammerTarget = 3 + Math.floor(w * 0.8) + metalType * 2;
-		const timeLimit = Math.max(25, 65 - w * 3) * DIFF_MULT[gs.difficulty];
-		const baseScore = (50 + metalType * 30 + w * 10) | 0;
+		// Pull from queue
+		this.fillOrderQueue();
+		const order = gs.orderQueue.shift()!;
+		this.fillOrderQueue(); // refill so queue always has 2
 
-		// Golden order — 15% chance after wave 2
-		const isGolden = w >= 3 && Math.random() < 0.15;
-
-		// Rush order — 12% chance after wave 1, short timer + 1.5x score
-		const isRush = !isGolden && w >= 2 && Math.random() < 0.12;
-
-		const rushTimeMult = isRush ? 0.6 : 1;
-
-		gs.currentOrder = {
-			itemType, metalType, hammerTarget,
-			timeLimit: timeLimit * rushTimeMult,
-			baseScore: isRush ? Math.floor(baseScore * 1.5) : baseScore,
-			isGolden,
-			isRush,
-		};
-		gs.orderTimer = timeLimit;
+		gs.currentOrder = order;
+		gs.orderTimer = order.timeLimit;
 		gs.workStep = 'idle';
 		gs.heatLevel = 0;
 		gs.hammerCount = 0;
+		gs.heatDecayActive = false;
+		gs.rhythmStreak = 0;
+		gs.lastHammerTime = 0;
+		gs.prevHammerInterval = 0;
 		gs.dirty = true;
 		this.updateActiveStation();
 		// Change customer appearance each order
@@ -1150,6 +1318,7 @@ export class GameSystem extends createSystem({
 				if (gs.workStep === 'idle') {
 					gs.workStep = 'heating';
 					gs.heatLevel = 0;
+					gs.heatDecayActive = false;
 					this.moveWorkpiece(1);
 					// Shape workpiece based on item type
 					this.createWorkpieceShape(o.itemType);
@@ -1170,12 +1339,40 @@ export class GameSystem extends createSystem({
 					gs.heatLevel = Math.min(1, gs.heatLevel + 0.15);
 					this.audioSys?.playFireCrackle();
 					gs.dirty = true;
+				} else if (gs.workStep === 'cooled') {
+					// Re-heat: workpiece cooled below threshold, player brought it back
+					gs.workStep = 'heating';
+					gs.heatDecayActive = false;
+					this.moveWorkpiece(1);
+					this.updateActiveStation();
+					gs.dirty = true;
 				}
 				break;
 			case 2:
 				if (gs.workStep === 'hot' || gs.workStep === 'hammering') {
 					gs.workStep = 'hammering';
-					gs.hammerCount++;
+					gs.heatDecayActive = true; // start cooling once hammering begins
+
+					// Rhythm hammer detection
+					const now = this.elapsed;
+					const interval = now - gs.lastHammerTime;
+					if (gs.lastHammerTime > 0 && gs.prevHammerInterval > 0) {
+						const diff = Math.abs(interval - gs.prevHammerInterval);
+						if (diff < RHYTHM_TOLERANCE) {
+							gs.rhythmStreak++;
+							gs.rhythmGlowTimer = 0.3;
+							this.audioSys?.playRhythmBonusTick();
+						} else {
+							gs.rhythmStreak = 0;
+						}
+					}
+					gs.prevHammerInterval = interval;
+					gs.lastHammerTime = now;
+
+					// Hammer progress — double if in rhythm
+					const hammerProgress = gs.rhythmStreak >= 2 ? 2 : 1;
+					gs.hammerCount += hammerProgress;
+
 					this.triggerSparks();
 					this.audioSys?.playHammer();
 					this.anvilBounceTimer = 0.15;
@@ -1183,6 +1380,7 @@ export class GameSystem extends createSystem({
 					gs.cameraShakeIntensity = 0.008;
 					if (gs.hammerCount >= o.hammerTarget) {
 						gs.workStep = 'forged';
+						gs.heatDecayActive = false;
 						this.moveWorkpiece(3);
 						this.updateActiveStation();
 					}
@@ -1238,6 +1436,9 @@ export class GameSystem extends createSystem({
 			gs.goldenFlashTimer = 1.2;
 		}
 
+		// Delivery flourish animation
+		this.startFlourishAnimation(o.itemType, o.metalType);
+
 		// Show on weapon display
 		const displayIdx = (gs.totalOrders - 1) % this.displayWeapons.length;
 		if (this.displayWeapons[displayIdx]) {
@@ -1291,7 +1492,7 @@ export class GameSystem extends createSystem({
 		this.clearGlows();
 		const stepToStation: Record<string, number> = {
 			idle: 0, heating: 1, hot: 2, hammering: 2,
-			forged: 3, quenching: 3, ready: 4,
+			forged: 3, quenching: 3, ready: 4, cooled: 1,
 		};
 		const idx = stepToStation[gs.workStep];
 		if (idx !== undefined && this.stationGlows[idx]) {
@@ -1322,6 +1523,25 @@ export class GameSystem extends createSystem({
 		}
 	}
 
+	/* ─── Workpiece Heat Color ────────────────────────────── */
+
+	private updateWorkpieceHeatColor() {
+		const h = gs.heatLevel;
+		if (h < 0.3) {
+			this.workpieceMat.emissive.setHex(0xff2200);
+			this.workpieceMat.emissiveIntensity = h * 2.0;
+		} else if (h < 0.6) {
+			this.workpieceMat.emissive.setHex(0xff6600);
+			this.workpieceMat.emissiveIntensity = 0.6 + (h - 0.3) * 3.0;
+		} else if (h < 0.85) {
+			this.workpieceMat.emissive.setHex(0xffaa22);
+			this.workpieceMat.emissiveIntensity = 1.5 + (h - 0.6) * 2.0;
+		} else {
+			this.workpieceMat.emissive.setHex(0xffddaa);
+			this.workpieceMat.emissiveIntensity = 2.0 + (h - 0.85) * 4.0;
+		}
+	}
+
 	/* ─── Update Loop ────────────────────────────────────────── */
 
 	update(delta: number, time: number) {
@@ -1333,10 +1553,31 @@ export class GameSystem extends createSystem({
 			this.fireLightAlt.intensity = 1.2 + Math.cos(time * 6) * 0.4;
 		}
 
+		// Dynamic shadow light — oscillates position and intensity to cast moving shadows on walls
+		if (this.forgeShadowLight) {
+			const sx = Math.sin(time * 1.7) * 0.15;
+			const sy = Math.sin(time * 2.3) * 0.1;
+			this.forgeShadowLight.position.set(-0.9 + sx, 1.0 + sy, -1.5);
+			this.forgeShadowLight.intensity = 1.5 + Math.sin(time * 5) * 0.6 + Math.sin(time * 11) * 0.3;
+		}
+
 		// Torch flicker
 		for (let i = 0; i < this.torchLights.length; i++) {
 			const tl = this.torchLights[i];
 			tl.intensity = 1.0 + Math.sin(time * 7 + i * 1.7) * 0.35 + Math.sin(time * 13 + i * 2.3) * 0.2;
+		}
+
+		// Water ripple animation — oscillate opacity + emissive
+		if (this.waterSurface && this.waterMat) {
+			const ripple = Math.sin(time * 3) * 0.1 + Math.sin(time * 7.3) * 0.05;
+			this.waterMat.opacity = 0.65 + ripple;
+			this.waterMat.emissiveIntensity = 0.2 + Math.sin(time * 4.5) * 0.1;
+			// Subtle vertex-like shimmer via scale oscillation
+			this.waterSurface.scale.set(
+				1 + Math.sin(time * 2.1) * 0.015,
+				1,
+				1 + Math.cos(time * 2.7) * 0.015,
+			);
 		}
 
 		// Customer idle bob + delivery bounce
@@ -1369,6 +1610,29 @@ export class GameSystem extends createSystem({
 			this.ambientFill.intensity = 0.6;
 		}
 
+		// Delivery flourish animation — weapon spins upward and fades out
+		if (gs.flourishTimer > 0 && this.flourishGroup && this.flourishMat) {
+			gs.flourishTimer -= delta;
+			const progress = 1 - (gs.flourishTimer / 1.5);
+			// Float up
+			this.flourishGroup.position.y = 1.0 + progress * 1.2;
+			// Spin
+			this.flourishGroup.rotation.y = progress * Math.PI * 4;
+			// Slight tilt
+			this.flourishGroup.rotation.z = Math.sin(progress * Math.PI) * 0.3;
+			// Fade out in last 40%
+			if (progress > 0.6) {
+				this.flourishMat.opacity = Math.max(0, (1 - progress) / 0.4);
+			} else {
+				this.flourishMat.opacity = 1;
+			}
+			// Pulse emissive
+			this.flourishMat.emissiveIntensity = 1.5 + Math.sin(time * 10) * 0.5;
+			if (gs.flourishTimer <= 0) {
+				this.flourishGroup.visible = false;
+			}
+		}
+
 		// Station glow pulse — faster when timer is low
 		if (this.activeStation >= 0 && this.stationGlows[this.activeStation]) {
 			const mat = this.stationGlows[this.activeStation].material as MeshStandardMaterial;
@@ -1381,6 +1645,18 @@ export class GameSystem extends createSystem({
 			} else {
 				mat.color.setHex(0xff8800);
 				mat.emissive.setHex(0xff8800);
+			}
+		}
+
+		// Rhythm hammer glow on anvil
+		if (this.anvilGlowMat) {
+			if (gs.rhythmStreak >= 2) {
+				gs.rhythmGlowTimer = Math.max(0, gs.rhythmGlowTimer - delta);
+				const pulse = 0.3 + Math.sin(time * 12) * 0.15;
+				this.anvilGlowMat.opacity = pulse;
+				this.anvilGlowMat.emissiveIntensity = 2.0 + gs.rhythmStreak * 0.3;
+			} else {
+				this.anvilGlowMat.opacity = Math.max(0, this.anvilGlowMat.opacity - delta * 3);
 			}
 		}
 
@@ -1402,6 +1678,53 @@ export class GameSystem extends createSystem({
 			mat.opacity = 0.4 + Math.sin(time * 5) * 0.2;
 		}
 
+		// Weather effects — rain and lightning
+		if (gs.weatherActive && this.rainGroup) {
+			this.rainGroup.visible = true;
+			// Rain streaks
+			for (const sp of this.rainGroup.children) {
+				const m = sp as Mesh;
+				m.userData.life += delta;
+				const mat = m.material as MeshStandardMaterial;
+				// Fall down
+				m.position.y -= m.userData.speed * delta;
+				m.position.x += m.userData.drift * delta;
+				// Reset at bottom
+				if (m.position.y < -0.4) {
+					m.position.y = 0.4;
+					m.position.x = (Math.random() - 0.5) * 1.0;
+					m.userData.speed = 1.5 + Math.random() * 1.0;
+					m.userData.drift = (Math.random() - 0.5) * 0.2;
+				}
+				mat.opacity = 0.4 + Math.sin(m.userData.life * 8) * 0.15;
+				m.visible = true;
+			}
+
+			// Lightning
+			gs.lightningTimer -= delta;
+			if (gs.lightningTimer <= 0) {
+				gs.lightningFlashTimer = 0.15;
+				gs.lightningTimer = 10 + Math.random() * 20;
+				// Play thunder slightly delayed
+				setTimeout(() => this.audioSys?.playThunder(), 300 + Math.random() * 600);
+			}
+			if (gs.lightningFlashTimer > 0) {
+				gs.lightningFlashTimer -= delta;
+				if (this.ambientFill && gs.deliveryFlashTimer <= 0) {
+					const flash = gs.lightningFlashTimer / 0.15;
+					this.ambientFill.intensity = 0.6 + flash * 3.0;
+					this.ambientFill.color.setHex(0xccccff);
+				}
+			}
+
+			// Wind gust sound every 8-20 seconds
+			this.weatherWindTimer -= delta;
+			if (this.weatherWindTimer <= 0) {
+				this.audioSys?.playWindGust();
+				this.weatherWindTimer = 8 + Math.random() * 12;
+			}
+		}
+
 		// Wave complete countdown
 		if (gs.phase === 'wave_complete') {
 			gs.waveCompleteTimer -= delta;
@@ -1416,6 +1739,9 @@ export class GameSystem extends createSystem({
 				gs.phase = 'wave_intro';
 				gs.waveIntroTimer = 2.0;
 				gs.perfectWave = true;
+				// Refill order queue for new wave
+				gs.orderQueue = [];
+				this.fillOrderQueue();
 				gs.dirty = true;
 			}
 			return;
@@ -1440,6 +1766,22 @@ export class GameSystem extends createSystem({
 		if (gs.orderTimer <= 0) {
 			this.failOrder();
 			return;
+		}
+
+		// Heat decay — workpiece cools when away from forge during hammering
+		if (gs.heatDecayActive && (gs.workStep === 'hammering' || gs.workStep === 'hot')) {
+			gs.heatLevel -= HEAT_DECAY_RATE * delta;
+			if (gs.heatLevel <= HEAT_MIN_THRESHOLD) {
+				// Workpiece cooled! Must re-heat
+				gs.heatLevel = HEAT_MIN_THRESHOLD * 0.5;
+				gs.workStep = 'cooled';
+				gs.heatDecayActive = false;
+				gs.rhythmStreak = 0;
+				this.moveWorkpiece(1);
+				this.updateActiveStation();
+				this.audioSys?.playFail();
+			}
+			gs.dirty = true;
 		}
 
 		// Bellows boost timer
@@ -1473,7 +1815,7 @@ export class GameSystem extends createSystem({
 			const glowRing = this.bellowsGroup.children[this.bellowsGroup.children.length - 1] as Mesh;
 			if (glowRing && glowRing.material) {
 				const mat = glowRing.material as MeshStandardMaterial;
-				const showGlow = gs.phase === 'playing' && gs.workStep === 'heating';
+				const showGlow = gs.phase === 'playing' && (gs.workStep === 'heating' || gs.workStep === 'cooled');
 				const targetOpacity = showGlow ? 0.25 + Math.sin(time * 4) * 0.15 : 0;
 				mat.opacity += (targetOpacity - mat.opacity) * Math.min(1, delta * 8);
 			}
@@ -1489,33 +1831,18 @@ export class GameSystem extends createSystem({
 				this.moveWorkpiece(2);
 				this.updateActiveStation();
 			}
-			// Color transition: cold metal → orange → yellow-orange → white-hot
-			const h = gs.heatLevel;
-			if (h < 0.3) {
-				// Cold to dim orange
-				this.workpieceMat.emissive.setHex(0xff2200);
-				this.workpieceMat.emissiveIntensity = h * 2.0;
-			} else if (h < 0.6) {
-				// Orange to bright orange-yellow
-				this.workpieceMat.emissive.setHex(0xff6600);
-				this.workpieceMat.emissiveIntensity = 0.6 + (h - 0.3) * 3.0;
-			} else if (h < 0.85) {
-				// Yellow-orange to bright yellow
-				this.workpieceMat.emissive.setHex(0xffaa22);
-				this.workpieceMat.emissiveIntensity = 1.5 + (h - 0.6) * 2.0;
-			} else {
-				// White-hot glow
-				this.workpieceMat.emissive.setHex(0xffddaa);
-				this.workpieceMat.emissiveIntensity = 2.0 + (h - 0.85) * 4.0;
-			}
+			this.updateWorkpieceHeatColor();
 			gs.dirty = true;
 		}
 
-		// Persist heat glow during hot/hammering, gradually fading
+		// Cooled state — workpiece shows dim glow, hint to re-heat
+		if (gs.workStep === 'cooled') {
+			this.updateWorkpieceHeatColor();
+		}
+
+		// Persist heat glow during hot/hammering, with heat decay visual
 		if (gs.workStep === 'hot' || gs.workStep === 'hammering') {
-			this.workpieceMat.emissive.setHex(0xff4400);
-			const fadeProgress = gs.currentOrder ? gs.hammerCount / gs.currentOrder.hammerTarget : 0;
-			this.workpieceMat.emissiveIntensity = 1.5 * (1 - fadeProgress * 0.5);
+			this.updateWorkpieceHeatColor();
 		}
 
 		// Forged — dim glow

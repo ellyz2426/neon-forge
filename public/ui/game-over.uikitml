@@ -94,6 +94,10 @@
     <div class="hi-label">HIGH SCORE</div>
     <div class="hi-value" id="go-highscore">0</div>
   </div>
+  <div class="stat-row">
+    <div class="stat-label">RANK</div>
+    <div class="hi-value" id="go-rank">Apprentice</div>
+  </div>
   <div class="divider"></div>
   <div class="btn" id="btn-restart">
     <div class="btn-text">FORGE AGAIN</div>

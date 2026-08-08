@@ -3,6 +3,7 @@ import {
 	gs,
 	ITEM_NAMES,
 	METAL_NAMES,
+	getMasteryRank,
 	type GamePhase,
 } from './game-state.js';
 import { systemRefs } from './system-refs.js';
@@ -158,6 +159,15 @@ export class UISystem extends createSystem({}) {
 		if (this.helpPanel) this.helpPanel.visible = false;
 		if (this.pausePanel) this.pausePanel.visible = pa;
 		if (this.wavePanel) this.wavePanel.visible = w;
+
+		// Update mastery rank on menu
+		if (m) {
+			const rank = getMasteryRank();
+			this.menuPanel?.getElementById('rank')?.setProperties({ text: rank.title });
+			this.menuPanel?.getElementById('rank-progress')?.setProperties({
+				text: rank.next !== null ? `${gs.lifetimeCrafted}/${rank.next} items` : `${gs.lifetimeCrafted} items`,
+			});
+		}
 	}
 
 	private updateHUD() {
@@ -228,6 +238,9 @@ export class UISystem extends createSystem({}) {
 		}
 		const craftedText = craftedParts.length > 0 ? craftedParts.join(', ') : '0';
 		this.gameOverPanel?.getElementById('go-crafted')?.setProperties({ text: craftedText });
+		// Mastery rank
+		const rank = getMasteryRank();
+		this.gameOverPanel?.getElementById('go-rank')?.setProperties({ text: rank.title });
 	}
 
 	private updateWavePanel() {

@@ -57,6 +57,9 @@ export const gs = {
 	goldenFlashTimer: 0,
 	cameraShakeTimer: 0,
 	cameraShakeIntensity: 0,
+	lifetimeCrafted: 0,
+	lifetimeGames: 0,
+	bestWave: 0,
 };
 
 // Load high score from localStorage
@@ -70,4 +73,46 @@ export function saveHighScore() {
 		gs.highScore = gs.score;
 		try { localStorage.setItem('neon-forge-highscore', String(gs.highScore)); } catch { /* headless */ }
 	}
+}
+
+// Mastery ranks based on total lifetime crafted items
+export const MASTERY_RANKS = [
+	{ threshold: 0, title: 'Apprentice', color: '#cccccc' },
+	{ threshold: 10, title: 'Journeyman', color: '#44ff88' },
+	{ threshold: 25, title: 'Blacksmith', color: '#44aaff' },
+	{ threshold: 50, title: 'Artisan', color: '#ff8800' },
+	{ threshold: 100, title: 'Master Smith', color: '#ffdd00' },
+	{ threshold: 200, title: 'Legendary Smith', color: '#ff44ff' },
+	{ threshold: 500, title: 'Forge Lord', color: '#ff2222' },
+];
+
+// Load lifetime stats
+try {
+	const saved = localStorage.getItem('neon-forge-lifetime-crafted');
+	if (saved) gs.lifetimeCrafted = parseInt(saved, 10) || 0;
+	const savedGames = localStorage.getItem('neon-forge-lifetime-games');
+	if (savedGames) gs.lifetimeGames = parseInt(savedGames, 10) || 0;
+	const savedBestWave = localStorage.getItem('neon-forge-best-wave');
+	if (savedBestWave) gs.bestWave = parseInt(savedBestWave, 10) || 0;
+} catch { /* headless */ }
+
+export function saveLifetimeStats() {
+	gs.lifetimeCrafted += gs.totalOrders;
+	gs.lifetimeGames++;
+	if (gs.wave > gs.bestWave) gs.bestWave = gs.wave;
+	try {
+		localStorage.setItem('neon-forge-lifetime-crafted', String(gs.lifetimeCrafted));
+		localStorage.setItem('neon-forge-lifetime-games', String(gs.lifetimeGames));
+		localStorage.setItem('neon-forge-best-wave', String(gs.bestWave));
+	} catch { /* headless */ }
+}
+
+export function getMasteryRank(): { title: string; color: string; next: number | null } {
+	let rank = MASTERY_RANKS[0];
+	for (const r of MASTERY_RANKS) {
+		if (gs.lifetimeCrafted >= r.threshold) rank = r;
+	}
+	const idx = MASTERY_RANKS.indexOf(rank);
+	const next = idx < MASTERY_RANKS.length - 1 ? MASTERY_RANKS[idx + 1].threshold : null;
+	return { title: rank.title, color: rank.color, next };
 }

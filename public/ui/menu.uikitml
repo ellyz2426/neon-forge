@@ -46,10 +46,33 @@
     margin-top: 4;
     margin-bottom: 4;
   }
+  .rank-row {
+    flex-direction: column;
+    align-items: center;
+    gap: 2;
+    margin-bottom: 4;
+  }
+  .rank-label {
+    font-size: 11;
+    color: #ffaa33;
+  }
+  .rank-title {
+    font-size: 16;
+    color: #ffdd44;
+  }
+  .rank-progress {
+    font-size: 11;
+    color: #888888;
+  }
 </style>
 <Panel class="root">
   <div class="title" id="title">NEON FORGE</div>
   <div class="subtitle" id="subtitle">Blacksmith Arcade</div>
+  <div class="rank-row">
+    <div class="rank-label">RANK</div>
+    <div class="rank-title" id="rank">Apprentice</div>
+    <div class="rank-progress" id="rank-progress">0/10 items</div>
+  </div>
   <div class="divider"></div>
   <div class="btn" id="btn-play">
     <div class="btn-text">⚔ START FORGING</div>

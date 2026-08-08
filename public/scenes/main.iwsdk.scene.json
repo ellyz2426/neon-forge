@@ -71,6 +71,13 @@
       "content": { "type": "asset", "asset": "wave-panel" },
       "transform": { "position": [0, 1.5, -2.0], "scale": 0.5 },
       "components": { "RayInteractable": {} }
+    },
+    {
+      "id": "help-panel",
+      "name": "Help Panel",
+      "content": { "type": "asset", "asset": "help-panel" },
+      "transform": { "position": [0, 1.6, -2.5], "scale": 0.4 },
+      "components": { "RayInteractable": {} }
     }
   ]
 }

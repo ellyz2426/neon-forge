@@ -25,6 +25,7 @@ import {
 	METAL_COLORS,
 	METAL_EMISSIVE,
 	saveHighScore,
+	saveLifetimeStats,
 	type Order,
 	type WorkStep,
 } from './game-state.js';
@@ -71,6 +72,10 @@ export class GameSystem extends createSystem({
 	private dustGroup: Group | null = null;
 	private mainCamera: Group | null = null;
 	private cameraBasePos = new Vector3();
+	private ceilingGlow: Mesh | null = null;
+	private ceilingGlowMat: MeshStandardMaterial | null = null;
+	private chimneySparkGroup: Group | null = null;
+	private customerVariant = 0;
 
 	init() {
 		this.buildEnvironment();
@@ -79,6 +84,8 @@ export class GameSystem extends createSystem({
 		this.createSteamParticles();
 		this.createEmberParticles();
 		this.createDustMotes();
+		this.createCeilingGlow();
+		this.createChimneySparks();
 
 		// Register self for cross-system lookups
 		systemRefs.game = this;
@@ -522,28 +529,96 @@ export class GameSystem extends createSystem({
 	private buildCustomer(sc: Scene) {
 		this.customerGroup = new Group();
 		this.customerGroup.position.set(2.2, 0, -1.0);
+		this.buildCustomerShape(0);
+		sc.add(this.customerGroup);
+	}
+
+	private buildCustomerShape(variant: number) {
+		// Clear existing children
+		while (this.customerGroup!.children.length > 0) {
+			const child = this.customerGroup!.children[0];
+			if (child instanceof Mesh) child.geometry.dispose();
+			this.customerGroup!.remove(child);
+		}
 
 		const darkMat = new MeshStandardMaterial({
 			color: 0x0a0a0a, roughness: 0.9,
 			emissive: 0x221133, emissiveIntensity: 0.15,
 		});
 
-		// Base / feet
-		const base = new Mesh(new BoxGeometry(0.3, 0.08, 0.2), darkMat);
-		base.position.y = 0.04;
-		this.customerGroup.add(base);
-
-		// Body
-		const body = new Mesh(new CylinderGeometry(0.15, 0.18, 0.7, 8), darkMat);
-		body.position.y = 0.43;
-		this.customerGroup.add(body);
-
-		// Head
-		const head = new Mesh(new SphereGeometry(0.12, 8, 6), darkMat);
-		head.position.y = 0.92;
-		this.customerGroup.add(head);
-
-		sc.add(this.customerGroup);
+		switch (variant % 4) {
+			case 0: {
+				// Standard customer — tall figure
+				const base = new Mesh(new BoxGeometry(0.3, 0.08, 0.2), darkMat);
+				base.position.y = 0.04;
+				this.customerGroup!.add(base);
+				const body = new Mesh(new CylinderGeometry(0.15, 0.18, 0.7, 8), darkMat);
+				body.position.y = 0.43;
+				this.customerGroup!.add(body);
+				const head = new Mesh(new SphereGeometry(0.12, 8, 6), darkMat);
+				head.position.y = 0.92;
+				this.customerGroup!.add(head);
+				break;
+			}
+			case 1: {
+				// Short stocky customer (dwarf-like)
+				const base = new Mesh(new BoxGeometry(0.35, 0.06, 0.25), darkMat);
+				base.position.y = 0.03;
+				this.customerGroup!.add(base);
+				const body = new Mesh(new CylinderGeometry(0.2, 0.22, 0.45, 8), darkMat);
+				body.position.y = 0.3;
+				this.customerGroup!.add(body);
+				const head = new Mesh(new SphereGeometry(0.14, 8, 6), darkMat);
+				head.position.y = 0.65;
+				this.customerGroup!.add(head);
+				// Beard
+				const beard = new Mesh(new ConeGeometry(0.1, 0.12, 6), darkMat);
+				beard.position.set(0, 0.53, 0.08);
+				this.customerGroup!.add(beard);
+				break;
+			}
+			case 2: {
+				// Tall thin customer (elf-like)
+				const base = new Mesh(new BoxGeometry(0.22, 0.06, 0.18), darkMat);
+				base.position.y = 0.03;
+				this.customerGroup!.add(base);
+				const body = new Mesh(new CylinderGeometry(0.1, 0.14, 0.85, 8), darkMat);
+				body.position.y = 0.48;
+				this.customerGroup!.add(body);
+				const head = new Mesh(new SphereGeometry(0.1, 8, 6), darkMat);
+				head.position.y = 1.0;
+				this.customerGroup!.add(head);
+				// Pointed hat
+				const hat = new Mesh(new ConeGeometry(0.1, 0.2, 6), darkMat);
+				hat.position.y = 1.2;
+				this.customerGroup!.add(hat);
+				break;
+			}
+			case 3: {
+				// Armored knight customer
+				const base = new Mesh(new BoxGeometry(0.32, 0.08, 0.22), darkMat);
+				base.position.y = 0.04;
+				this.customerGroup!.add(base);
+				const body = new Mesh(new BoxGeometry(0.3, 0.65, 0.2), darkMat);
+				body.position.y = 0.4;
+				this.customerGroup!.add(body);
+				const head = new Mesh(new BoxGeometry(0.16, 0.18, 0.16), darkMat);
+				head.position.y = 0.82;
+				this.customerGroup!.add(head);
+				// Shoulder pads
+				const padMat = new MeshStandardMaterial({
+					color: 0x111111, roughness: 0.7, metalness: 0.3,
+					emissive: 0x110022, emissiveIntensity: 0.1,
+				});
+				const lPad = new Mesh(new SphereGeometry(0.08, 6, 5), padMat);
+				lPad.position.set(-0.2, 0.7, 0);
+				this.customerGroup!.add(lPad);
+				const rPad = new Mesh(new SphereGeometry(0.08, 6, 5), padMat);
+				rPad.position.set(0.2, 0.7, 0);
+				this.customerGroup!.add(rPad);
+				break;
+			}
+		}
 	}
 
 	private buildStation(type: number) {
@@ -906,6 +981,64 @@ export class GameSystem extends createSystem({
 		this.world.scene.add(this.dustGroup);
 	}
 
+	/* ─── Ceiling Glow ────────────────────────────────────── */
+
+	private createCeilingGlow() {
+		this.ceilingGlowMat = new MeshStandardMaterial({
+			color: 0xff4400, emissive: 0xff3300, emissiveIntensity: 0.5,
+			transparent: true, opacity: 0.15,
+		});
+		this.ceilingGlow = new Mesh(new PlaneGeometry(3, 3), this.ceilingGlowMat);
+		this.ceilingGlow.rotation.x = Math.PI / 2;
+		this.ceilingGlow.position.set(-0.9, 4.95, -2.0);
+		this.world.scene.add(this.ceilingGlow);
+	}
+
+	/* ─── Chimney Sparks ────────────────────────────────── */
+
+	private createChimneySparks() {
+		this.chimneySparkGroup = new Group();
+		this.chimneySparkGroup.position.set(-0.9, 3.5, -2.0);
+		for (let i = 0; i < 6; i++) {
+			const sparkMat = new MeshStandardMaterial({
+				color: 0xff6600, emissive: 0xff8800, emissiveIntensity: 4.0,
+				transparent: true, opacity: 0,
+			});
+			const spark = new Mesh(new SphereGeometry(0.005 + Math.random() * 0.004, 4, 3), sparkMat);
+			spark.userData.active = false;
+			spark.userData.life = 0;
+			spark.userData.maxLife = 0.6 + Math.random() * 0.8;
+			spark.userData.velX = 0;
+			spark.userData.velY = 0;
+			spark.userData.velZ = 0;
+			spark.visible = false;
+			this.chimneySparkGroup.add(spark);
+		}
+		this.world.scene.add(this.chimneySparkGroup);
+	}
+
+	private spawnChimneySpark() {
+		if (!this.chimneySparkGroup) return;
+		for (const sp of this.chimneySparkGroup.children) {
+			const m = sp as Mesh;
+			if (!m.userData.active) {
+				m.userData.active = true;
+				m.userData.life = m.userData.maxLife;
+				m.userData.velX = (Math.random() - 0.5) * 0.3;
+				m.userData.velY = 0.5 + Math.random() * 0.4;
+				m.userData.velZ = (Math.random() - 0.5) * 0.2;
+				m.position.set(
+					(Math.random() - 0.5) * 0.15,
+					0,
+					(Math.random() - 0.5) * 0.15,
+				);
+				m.visible = true;
+				(m.material as MeshStandardMaterial).opacity = 0.9;
+				return;
+			}
+		}
+	}
+
 	/* ─── Game Logic ─────────────────────────────────────────── */
 
 	public startGame() {
@@ -945,6 +1078,7 @@ export class GameSystem extends createSystem({
 		this.sparkGroup.visible = false;
 		if (this.goldenGlow) this.goldenGlow.visible = false;
 		saveHighScore();
+		saveLifetimeStats();
 		gs.dirty = true;
 		this.clearGlows();
 	}
@@ -1002,6 +1136,9 @@ export class GameSystem extends createSystem({
 		gs.hammerCount = 0;
 		gs.dirty = true;
 		this.updateActiveStation();
+		// Change customer appearance each order
+		this.customerVariant++;
+		if (this.customerGroup) this.buildCustomerShape(this.customerVariant);
 	}
 
 	private handleStation(type: number) {
@@ -1541,6 +1678,44 @@ export class GameSystem extends createSystem({
 				const mat = m.material as MeshStandardMaterial;
 				// Subtle shimmer as motes catch the light
 				mat.opacity = 0.12 + Math.sin(time * 2 + m.userData.phaseX) * 0.08;
+			}
+		}
+
+		// Ceiling glow — pulses with forge fire intensity
+		if (this.ceilingGlow && this.ceilingGlowMat) {
+			const fireIntensity = 0.12 + Math.sin(time * 6) * 0.04 + Math.sin(time * 9.5) * 0.03;
+			this.ceilingGlowMat.opacity = fireIntensity;
+			this.ceilingGlowMat.emissiveIntensity = 0.3 + Math.sin(time * 7) * 0.15;
+		}
+
+		// Chimney sparks — occasional sparks fly out of chimney
+		if (this.chimneySparkGroup) {
+			// Spawn a new spark randomly (~1 every 1.5 seconds)
+			if (Math.random() < delta * 0.7) {
+				this.spawnChimneySpark();
+			}
+			for (const sp of this.chimneySparkGroup.children) {
+				const m = sp as Mesh;
+				if (m.userData.active) {
+					m.userData.life -= delta;
+					if (m.userData.life <= 0) {
+						m.userData.active = false;
+						m.visible = false;
+						continue;
+					}
+					m.position.x += m.userData.velX * delta;
+					m.position.y += m.userData.velY * delta;
+					m.position.z += m.userData.velZ * delta;
+					m.userData.velY -= 0.3 * delta; // slight gravity
+					const r = m.userData.life / m.userData.maxLife;
+					const mat = m.material as MeshStandardMaterial;
+					mat.opacity = r * 0.9;
+					// Color shift to red as they die
+					if (r < 0.3) {
+						mat.emissive.setHex(0xff2200);
+						mat.emissiveIntensity = 2.0;
+					}
+				}
 			}
 		}
 
